@@ -201,8 +201,8 @@ def validate_gui_action_safety(tool_name, args):
 
             if last_typed:
                 norm_last = re.sub(r"\s+", " ", last_typed).strip().lower()
-                # If submitting text typed in terminal or containing command keywords -> Fail closed
-                if app_ctx == "terminal" or any(kw in norm_last for kw in ("rm ", "sudo ", "chmod ", "dd ", "python", "bash", "sh")):
+                # If submitting text typed in terminal or containing explicit command keywords -> Fail closed
+                if app_ctx == "terminal" or any(kw in norm_last for kw in ("rm ", "sudo ", "chmod ", "dd ", "python -c", "python3 -c", "bash -c", "sh -c")):
                     return False, "Safety Block: Action-chain submitting text execution in terminal context requires explicit user confirmation."
 
     return True, None

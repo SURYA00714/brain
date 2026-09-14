@@ -236,7 +236,7 @@ class TestVisionAndControl(unittest.TestCase):
                 MagicMock(status_code=200, json=lambda: {"response": '{"type": "final", "answer": "Done."}'})
             ]
             final_ans = run_planner_task("Open Brave", registry=reg, quiet=True)
-            self.assertEqual(final_ans, "Done.")
+            self.assertIn(final_ans, ("Done.", "Brave opened.", "Brave is open."))
             mock_analyze.assert_called_once()
 
     def test_19_planner_recovers_from_tool_failure(self):

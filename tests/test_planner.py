@@ -137,6 +137,103 @@ class TestPlannerEngine(unittest.TestCase):
         final_ans = run_planner_task("Read /etc/passwd", registry=self.test_registry, quiet=True)
         self.assertEqual(final_ans, "I could not access that file due to safety controls.")
 
+    # 9. Regression Test: "hello" does not execute ANALYZE_SCREEN or GUI tools
+    @patch("brain.requests.post")
+    def test_hello_does_not_trigger_analyze_screen(self, mock_brain_post):
+        mock_brain_post.return_value = make_mock_response('{"type": "final", "answer": "Hello! How can I help you today?"}')
+        ans = run_planner_task("hello", registry=self.test_registry, quiet=True)
+        self.assertIn("Hello!", ans)
+
+    # 10. Regression Test: ANALYZE_SCREEN observation formatting in planner history reports element count
+    def test_compact_screen_observation_formatting(self):
+        from brain import build_planner_prompt
+        fake_obs = {
+            "success": True,
+            "status": "VISION_ANALYZED",
+            "screen": {"width": 1920, "height": 1080},
+            "elements": [{"id": "elem_1", "type": "button", "text": "OK", "center_x": 100, "center_y": 200, "confidence": 0.99}],
+            "image_path": "logs/screen_temp.png"
+        }
+        history = [{
+            "action": {"type": "tool", "tool": "ANALYZE_SCREEN", "arguments": {}},
+            "result": fake_obs,
+            "action_hash": "ANALYZE_SCREEN:{}"
+        }]
+        prompt = build_planner_prompt("Analyze my screen", history)
+        self.assertIn('"elements_count": 1', prompt)
+        self.assertNotIn("image_path", prompt.split("Previous Step Execution History:")[1])
+
+    # 11. Regression Test: WEB_SEARCH -> FINAL answer without repeating WEB_SEARCH
+    @patch("brain.requests.post")
+    def test_web_search_produces_final_answer_without_repeat(self, mock_brain_post):
+        mock_brain_post.side_effect = [
+            make_mock_response('{"type": "tool", "tool": "WEB_SEARCH", "arguments": {"query": "latest Python 3.12 features"}}'),
+            make_mock_response('{"type": "final", "answer": "Python 3.12 introduces faster execution and better error messages."}')
+        ]
+        ans = run_planner_task("Search the web for latest Python 3.12 features", registry=self.test_registry, quiet=True)
+        self.assertIn("Python 3.12 introduces", ans)
+        self.assertEqual(self.mock_web_search.call_count, 1)
+
+    # 12. Regression Test: LIST_FILES request -> LIST_FILES -> FINAL answer
+    @patch("brain.requests.post")
+    def test_list_files_produces_final_answer_without_find_files(self, mock_brain_post):
+        mock_brain_post.side_effect = [
+            make_mock_response('{"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": "Brain"}}'),
+            make_mock_response('{"type": "final", "answer": "Here are the files in your directory: brain.py."}')
+        ]
+        ans = run_planner_task("List files in my project directory", registry=self.test_registry, quiet=True)
+        self.assertIn("brain.py", ans)
+        self.assertEqual(self.mock_list_files.call_count, 1)
+        self.assertEqual(self.mock_find_files.call_count, 0)
+
+    # 13. Regression Test: FIND_FILES remains available for pattern search requests
+    @patch("brain.requests.post")
+    def test_find_files_available_for_pattern_search(self, mock_brain_post):
+        mock_brain_post.side_effect = [
+            make_mock_response('{"type": "tool", "tool": "FIND_FILES", "arguments": {"pattern": "*.py", "search_root": "Brain"}}'),
+            make_mock_response('{"type": "final", "answer": "Found 1 matching python file: brain.py"}')
+        ]
+        ans = run_planner_task("Find all python files in Brain", registry=self.test_registry, quiet=True)
+        self.assertIn("brain.py", ans)
+        self.assertEqual(self.mock_find_files.call_count, 1)
+
+    # 14. Regression Test: Narrative plain text mentioning tool names is parsed as FINAL answer
+    def test_narrative_plain_text_with_tool_name_parsed_as_final(self):
+        text = "I executed WEB_SEARCH and found that Python 3.12 has new syntax features."
+        action, err = parse_model_action(text)
+        self.assertIsNone(err)
+        self.assertEqual(action["type"], "final")
+        self.assertEqual(action["answer"], text)
+
+    # 15. Regression Test: Task state isolation clears previous task observation
+    def test_task_state_isolation_clears_observation(self):
+        from tools.vision import default_vision
+        default_vision._current_observation = {
+            "status": "VISION_ANALYZED",
+            "screen": {"width": 1920, "height": 1080},
+            "elements": [{"id": "elem_button_stale", "type": "button", "text": "Stale", "center_x": 10, "center_y": 20, "confidence": 0.99}],
+            "timestamp": 1000
+        }
+        # Run new task "hello" which clears observation at entry
+        with patch("brain.requests.post") as mock_post:
+            mock_post.return_value = make_mock_response('{"type": "final", "answer": "Hello!"}')
+            ans = run_planner_task("hello", registry=self.test_registry, quiet=True)
+            self.assertTrue(ans.startswith("Hello"))
+            self.assertIsNone(default_vision.get_current_observation())
+
+    # 16. Regression Test: "List files in my Brain project" prefers LIST_FILES over FIND_FILES
+    @patch("brain.requests.post")
+    def test_list_files_in_my_brain_project_prefers_list_files(self, mock_brain_post):
+        mock_brain_post.side_effect = [
+            make_mock_response('{"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": "Brain"}}'),
+            make_mock_response('{"type": "final", "answer": "The files in Brain project are: brain.py, tools, tests."}')
+        ]
+        ans = run_planner_task("List files in my Brain project", registry=self.test_registry, quiet=True)
+        self.assertIn("brain.py", ans)
+        self.assertEqual(self.mock_list_files.call_count, 1)
+        self.assertEqual(self.mock_find_files.call_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

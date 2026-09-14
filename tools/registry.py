@@ -1,8 +1,10 @@
-from tools.apps import open_app, APPROVED_APPS
+from tools.apps import open_app, close_app, focus_app, APPROVED_APPS
 from tools.search import perform_web_search
 from tools.files import list_files, find_files, read_text_file, create_folder
 from tools.screen import capture_screen, analyze_captured_screen
 from tools.vision import default_vision
+from tools.browser import browser_search, browser_navigate
+from tools.time_tool import get_current_time
 from tools.input import (
     move_mouse, click_mouse, double_click, scroll,
     type_text, press_key, hotkey, click_element, type_in_element,
@@ -73,6 +75,20 @@ class ToolRegistry:
             if tool.name == "OPEN_APP":
                 app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
                 result = tool.func(app_name)
+            elif tool.name == "CLOSE_APP":
+                app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
+                result = tool.func(app_name)
+            elif tool.name == "FOCUS_APP":
+                app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
+                result = tool.func(app_name)
+            elif tool.name == "BROWSER_SEARCH":
+                query = arguments.get("query") or arguments.get("keywords") or ""
+                mode = arguments.get("mode", "AUTO")
+                result = tool.func(query, mode=mode)
+            elif tool.name == "BROWSER_NAVIGATE":
+                url = arguments.get("url") or arguments.get("link") or ""
+                mode = arguments.get("mode", "AUTO")
+                result = tool.func(url, mode=mode)
             elif tool.name == "WEB_SEARCH":
                 query = arguments.get("query") or arguments.get("keywords") or ""
                 result = tool.func(query)
@@ -91,6 +107,8 @@ class ToolRegistry:
                 parent_root = arguments.get("parent_root") or arguments.get("parent") or arguments.get("location") or "Downloads"
                 result = tool.func(folder_name, parent_root)
             elif tool.name == "SCREENSHOT":
+                result = tool.func()
+            elif tool.name == "TIME":
                 result = tool.func()
             elif tool.name == "MOVE_MOUSE":
                 x = arguments.get("x", 0)
@@ -112,10 +130,15 @@ class ToolRegistry:
                 text = arguments.get("text", "")
                 result = tool.func(text)
             elif tool.name == "PRESS_KEY":
-                key = arguments.get("key", "")
-                result = tool.func(key)
+                key = arguments.get("key") or arguments.get("keys") or ""
+                if isinstance(key, list):
+                    result = hotkey(key)
+                else:
+                    result = tool.func(key)
             elif tool.name == "HOTKEY":
-                keys = arguments.get("keys", [])
+                keys = arguments.get("keys") or arguments.get("key") or []
+                if isinstance(keys, str):
+                    keys = [k.strip() for k in keys.split("+")]
                 result = tool.func(keys)
             elif tool.name == "ANALYZE_SCREEN":
                 img_path = arguments.get("image_path") or arguments.get("path")
@@ -136,6 +159,14 @@ class ToolRegistry:
             default_chain_tracker.record_action(tool.name, arguments, result)
 
             # Determine success based on tool return content
+            if isinstance(result, dict) and not result.get("success", True):
+                return {
+                    "success": False,
+                    "tool": tool.name,
+                    "data": result.get("data"),
+                    "error": result.get("error", "Tool execution reported failure.")
+                }
+
             if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Access Denied:") or result.startswith("Safety Block:") or result.startswith("Brain Error:")):
                 return {
                     "success": False,
@@ -182,7 +213,7 @@ default_registry.register(Tool(
 
 default_registry.register(Tool(
     name="LIST_FILES",
-    description="Lists files and subdirectories in an approved directory path or alias (e.g. Brain, Downloads).",
+    description="Lists files and subdirectories in a directory path or alias (e.g. Brain, Downloads). MANDATORY choice for general requests to list, view, or show directory contents (e.g. 'List files in my Brain project').",
     parameters={"target_path": "string (default: Brain)"},
     risk_level="LOW",
     func=list_files
@@ -190,7 +221,7 @@ default_registry.register(Tool(
 
 default_registry.register(Tool(
     name="FIND_FILES",
-    description="Finds files matching a search pattern (e.g. *.py, *.pdf) within an approved directory.",
+    description="Searches for specific files matching an explicit wildcard or extension pattern (e.g. *.py, *.pdf, *.json). NEVER use for general directory listing requests without a search pattern.",
     parameters={"pattern": "string", "search_root": "string (default: Brain)"},
     risk_level="LOW",
     func=find_files
@@ -302,4 +333,46 @@ default_registry.register(Tool(
     risk_level="MEDIUM",
     func=type_in_element
 ))
+
+# Phase 9 Adaptive Capability Tools
+default_registry.register(Tool(
+    name="CLOSE_APP",
+    description="Safely closes Brain-owned instances of an application (brave, terminal, file_manager, text_editor). Operates only on tracked Brain processes.",
+    parameters={"app_name": "string (brave | terminal | file_manager | text_editor)"},
+    risk_level="MEDIUM",
+    func=close_app
+))
+
+default_registry.register(Tool(
+    name="FOCUS_APP",
+    description="Brings an open desktop application window to focus.",
+    parameters={"app_name": "string (brave | terminal | file_manager | text_editor)"},
+    risk_level="LOW",
+    func=focus_app
+))
+
+default_registry.register(Tool(
+    name="BROWSER_SEARCH",
+    description="Capability tool to execute a web search query. Uses structured interaction by default (AUTO/BACKGROUND) or direct browser GUI controls (FOREGROUND).",
+    parameters={"query": "string"},
+    risk_level="LOW",
+    func=browser_search
+))
+
+default_registry.register(Tool(
+    name="BROWSER_NAVIGATE",
+    description="Capability tool to navigate to a URL.",
+    parameters={"url": "string"},
+    risk_level="LOW",
+    func=browser_navigate
+))
+
+default_registry.register(Tool(
+    name="TIME",
+    description="Returns the current local system time.",
+    parameters={},
+    risk_level="LOW",
+    func=get_current_time
+))
+
 

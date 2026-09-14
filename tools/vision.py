@@ -266,6 +266,9 @@ class VisionProvider:
         if len(elements) > self._max_elements:
             elements = elements[:self._max_elements]
 
+        from tools.apps import default_app_tracker
+        focused_app = default_app_tracker.get_focused_app() or "desktop"
+
         obs = {
             "success": raw_res.get("success", True),
             "status": raw_res.get("status", "VISION_NOT_AVAILABLE"),
@@ -273,7 +276,9 @@ class VisionProvider:
             "elements": elements,
             "image_path": raw_res.get("image_path", str(image_path) if image_path else ""),
             "timestamp": raw_res.get("timestamp", time.time()),
-            "observation_id": raw_res.get("observation_id", f"obs_{int(time.time()*1000)}")
+            "observation_id": raw_res.get("observation_id", f"obs_{int(time.time()*1000)}"),
+            "source_application": focused_app,
+            "focused_application": focused_app
         }
 
         self._current_observation = obs
