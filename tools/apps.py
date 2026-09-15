@@ -50,6 +50,26 @@ class AppTracker:
         self._currently_focused_app = app_name
         return entry
 
+    def register_app(self, app_name, pid=None, brain_owned=True):
+        clean_name = normalize_app_name(app_name)
+        if clean_name not in self._tracked_apps:
+            self._tracked_apps[clean_name] = []
+
+        entry = {
+            "app_name": clean_name,
+            "executable": clean_name,
+            "pid": pid,
+            "proc": None,
+            "launch_time": time.time(),
+            "brain_owned": brain_owned,
+            "process_alive": True,
+            "window_detected": True,
+            "window_focused": True,
+            "last_seen": time.time()
+        }
+        self._tracked_apps[clean_name].append(entry)
+        return entry
+
     def is_running(self, app_name):
         clean_name = normalize_app_name(app_name)
         entries = self._tracked_apps.get(clean_name, [])

@@ -85,15 +85,57 @@ class DDGHTMLParser(HTMLParser):
             self.current_snippet += data
 
 
-def perform_web_search(query, max_results=3):
+def perform_web_search_structured(query, max_results=3):
     """
-    Performs a web search for the given query using DuckDuckGo HTML endpoint.
-    Returns a formatted string containing titles, snippets, and clean destination URLs.
+    Performs a web search using duckduckgo_search library with fallback to HTML scraper.
+    Returns normalized dictionary contract:
+    {
+      "success": bool,
+      "query": str,
+      "results": [{"title": str, "url": str, "snippet": str}],
+      "provider": str,
+      "status": str
+    }
     """
     clean_query = query.strip() if query else ""
     if not clean_query:
-        return "Search query cannot be empty."
+        return {
+            "success": False,
+            "query": "",
+            "results": [],
+            "provider": "duckduckgo",
+            "status": "ERROR_EMPTY_QUERY"
+        }
 
+    # Try mature duckduckgo_search library first
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            raw_results = list(ddgs.text(clean_query, max_results=max_results * 2))
+            clean_results = []
+            for r in raw_results:
+                link = clean_url(r.get("href") or r.get("link") or "")
+                if link and (r.get("title") or r.get("body")):
+                    clean_results.append({
+                        "title": r.get("title", "").strip(),
+                        "url": link,
+                        "snippet": (r.get("body") or r.get("snippet") or "").strip()
+                    })
+                if len(clean_results) >= max_results:
+                    break
+
+            if clean_results:
+                return {
+                    "success": True,
+                    "query": clean_query,
+                    "results": clean_results,
+                    "provider": "duckduckgo_ddgs",
+                    "status": "COMPLETED"
+                }
+    except Exception:
+        pass  # Fall back to HTML parser below
+
+    # Fallback to internal DDGHTMLParser
     url = "https://html.duckduckgo.com/html/"
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -106,33 +148,53 @@ def perform_web_search(query, max_results=3):
         parser = DDGHTMLParser()
         parser.feed(response.text)
 
-        if not parser.results:
-            return f"No web search results found for '{clean_query}'."
-
-        formatted_output = [f"Search results for '{clean_query}':"]
-        count = 0
+        clean_results = []
         for item in parser.results:
-            if count >= max_results:
+            if len(clean_results) >= max_results:
                 break
-            title = item.get("title") or "No title"
-            snippet = item.get("snippet") or "No snippet"
             link = item.get("link")
-            if not link:
-                continue
+            if link:
+                clean_results.append({
+                    "title": item.get("title", ""),
+                    "url": link,
+                    "snippet": item.get("snippet", "")
+                })
 
-            count += 1
-            formatted_output.append(f"{count}. {title}\n   Snippet: {snippet}\n   URL: {link}")
-
-        if count == 0:
-            return f"No valid web search results found for '{clean_query}'."
-
-        return "\n\n".join(formatted_output)
-
-    except requests.exceptions.ConnectionError:
-        return "Error: Unable to connect to search service. Please check your internet connection."
-    except requests.exceptions.Timeout:
-        return "Error: Web search request timed out."
-    except requests.exceptions.RequestException as e:
-        return f"Error executing web search: {str(e)}"
+        return {
+            "success": len(clean_results) > 0,
+            "query": clean_query,
+            "results": clean_results,
+            "provider": "duckduckgo_html",
+            "status": "COMPLETED" if clean_results else "NO_RESULTS"
+        }
     except Exception as e:
-        return f"Unexpected error during web search: {str(e)}"
+        return {
+            "success": False,
+            "query": clean_query,
+            "results": [],
+            "provider": "duckduckgo_html",
+            "status": f"ERROR: {str(e)}"
+        }
+
+
+def perform_web_search(query, max_results=3):
+    """
+    Performs a web search for the given query using DuckDuckGo HTML endpoint.
+    Returns a formatted string containing titles, snippets, and clean destination URLs.
+    """
+    struct_res = perform_web_search_structured(query, max_results=max_results)
+    if not struct_res.get("success"):
+        return f"No web search results found for '{query}'."
+
+    results = struct_res.get("results", [])
+    if not results:
+        return f"No valid web search results found for '{query}'."
+
+    formatted_output = [f"Search results for '{query}':"]
+    for idx, item in enumerate(results, 1):
+        formatted_output.append(
+            f"{idx}. {item.get('title', 'No title')}\n   Snippet: {item.get('snippet', 'No snippet')}\n   URL: {item.get('url', '')}"
+        )
+
+    return "\n\n".join(formatted_output)
+

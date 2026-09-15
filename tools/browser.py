@@ -107,34 +107,119 @@ class GUIFallbackBrowserProvider(BaseBrowserProvider):
         return {"success": True, "observation": obs, "provider": "gui_fallback"}
 
 
+class PlaywrightBrowserProvider(BaseBrowserProvider):
+    """
+    Playwright Browser Provider.
+    Executes fast, reliable structured browser automation via Playwright DOM / CDP
+    without requiring visual desktop OCR.
+    """
+    def search(self, query):
+        if not query or not isinstance(query, str):
+            return {"success": False, "error": "Query cannot be empty."}
+        try:
+            from playwright.sync_api import sync_playwright
+            from tools.search import clean_url
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                encoded_q = query.replace(" ", "+")
+                page.goto(f"https://html.duckduckgo.com/html/?q={encoded_q}", timeout=10000)
+
+                locators = page.locator(".result__body")
+                count = min(locators.count(), 3)
+                results = []
+                for i in range(count):
+                    elem = locators.nth(i)
+                    title_elem = elem.locator(".result__a")
+                    snippet_elem = elem.locator(".result__snippet")
+                    title = title_elem.text_content() if title_elem.count() > 0 else ""
+                    href = title_elem.get_attribute("href") if title_elem.count() > 0 else ""
+                    snippet = snippet_elem.text_content() if snippet_elem.count() > 0 else ""
+
+                    link = clean_url(href)
+                    if link and title:
+                        results.append({
+                            "title": title.strip(),
+                            "url": link,
+                            "snippet": snippet.strip()
+                        })
+                browser.close()
+                if results:
+                    return {
+                        "success": True,
+                        "query": query,
+                        "results": results,
+                        "provider": "playwright_chromium",
+                        "status": "COMPLETED"
+                    }
+        except Exception:
+            pass
+        return StructuredBrowserProvider().search(query)
+
+    def navigate(self, url):
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=10000)
+                title = page.title()
+                browser.close()
+                return {"success": True, "url": url, "title": title, "provider": "playwright_chromium"}
+        except Exception as e:
+            return StructuredBrowserProvider().navigate(url)
+
+    def read_page(self, url=None):
+        if not url:
+            return StructuredBrowserProvider().read_page(url)
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=10000)
+                text = page.inner_text("body")
+                browser.close()
+                return {"success": True, "url": url, "content": text[:1000], "provider": "playwright_chromium"}
+        except Exception:
+            return StructuredBrowserProvider().read_page(url)
+
+
 class BrowserCapability:
     """
     Unified Browser Capability Controller.
-    Selects structured browser interaction first, falling back to desktop GUI when requested or necessary.
+    Selects structured Playwright/HTTP browser interaction first, falling back to desktop GUI when requested or necessary.
     """
     def __init__(self, provider=None):
+        self.playwright_provider = PlaywrightBrowserProvider()
         self.structured_provider = provider if provider else StructuredBrowserProvider()
         self.gui_provider = provider if provider else GUIFallbackBrowserProvider()
 
     def search(self, query, prefer_gui=False):
         if prefer_gui:
             return self.gui_provider.search(query)
-        
-        # Try structured first
+
+        # Try Playwright structured search first
+        res = self.playwright_provider.search(query)
+        if res.get("success"):
+            return res
+
+        # Fallback to HTTP structured provider
         res = self.structured_provider.search(query)
         if res.get("success"):
             return res
+
         return self.gui_provider.search(query)
 
     def navigate(self, url, prefer_gui=False):
         if prefer_gui:
             return self.gui_provider.navigate(url)
-        return self.structured_provider.navigate(url)
+        return self.playwright_provider.navigate(url)
 
     def read_page(self, url=None, prefer_gui=False):
         if prefer_gui:
             return self.gui_provider.read_page(url)
-        return self.structured_provider.read_page(url)
+        return self.playwright_provider.read_page(url)
 
 
 default_browser_capability = BrowserCapability()
