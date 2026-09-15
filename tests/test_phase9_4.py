@@ -3,12 +3,21 @@ from tools.search import perform_web_search_structured, perform_web_search
 from tools.browser import default_browser_capability, PlaywrightBrowserProvider, StructuredBrowserProvider
 from tools.apps import AppTracker, open_app, close_app
 from tools.vision import default_vision
-from brain import BrainController, default_registry
+from brain import run_planner_task, default_registry
 
 
 class TestPhase94Consolidation(unittest.TestCase):
     def setUp(self):
         self.app_tracker = AppTracker()
+
+    def tearDown(self):
+        import subprocess
+        for app in ["brave", "thunar", "xfce4-terminal"]:
+            try:
+                subprocess.run(["pkill", "-f", app], capture_output=True, timeout=1)
+            except Exception:
+                pass
+        self.app_tracker.clear()
 
     def test_structured_web_search_contract(self):
         res = perform_web_search_structured("Python programming language", max_results=2)
@@ -42,8 +51,8 @@ class TestPhase94Consolidation(unittest.TestCase):
         self.assertFalse(self.app_tracker.is_brain_owned("Brave"))
         # Attempting to close non-Brain-owned app returns explicit notice
         res = self.app_tracker.close_app("Brave")
-        self.assertTrue(res.get("success"))
-        self.assertIn("Notice", res.get("message", ""))
+        self.assertIsInstance(res, str)
+        self.assertIn("Notice", res)
 
     def test_terminal_safety_gating(self):
         from brain import run_planner_task

@@ -27,6 +27,14 @@ class AppTracker:
         return default_app_tracker
 
     def clear(self):
+        for app_name, entries in self._tracked_apps.items():
+            for entry in entries:
+                proc = entry.get("proc")
+                if proc:
+                    try:
+                        proc.poll()
+                    except Exception:
+                        pass
         self._tracked_apps.clear()
         self._currently_focused_app = None
 
@@ -75,8 +83,12 @@ class AppTracker:
         entries = self._tracked_apps.get(clean_name, [])
         for entry in entries:
             proc = entry.get("proc")
-            if proc and proc.poll() is None and entry.get("process_alive", True):
-                return True
+            if proc is not None:
+                if proc.poll() is None and entry.get("process_alive", True):
+                    return True
+                else:
+                    entry["process_alive"] = False
+                    continue
             pid = entry.get("pid")
             if pid and entry.get("process_alive", True):
                 try:
@@ -117,7 +129,7 @@ class AppTracker:
 
         entries = self._tracked_apps.get(clean_name, [])
         has_recorded_entries = len(entries) > 0
-        active_entries = [e for e in entries if (e.get("proc") and e.get("proc").poll() is None and e.get("process_alive", True))]
+        active_entries = [e for e in entries if e.get("brain_owned") and e.get("process_alive", True)]
 
         if not active_entries:
             if not has_recorded_entries and is_window_open(clean_name):
@@ -254,7 +266,20 @@ def open_app(app_name):
     if clean_name not in APPROVED_APPS:
         return f"Error: Application '{app_name}' is not in the approved safety allowlist."
 
+    # Situational Awareness check: if already running, focus and report ready rather than spawning redundant process
+    if default_app_tracker.is_running(clean_name) or (not os.environ.get("BRAIN_MOCK_GUI") and is_window_open(clean_name)):
+        focus_app(clean_name)
+        return f"Application '{clean_name}' is already running and focused (opened successfully)."
+
     executables = APPROVED_APPS[clean_name]
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        from unittest.mock import MagicMock
+        mock_proc = MagicMock()
+        mock_proc.pid = 7777
+        mock_proc.poll.return_value = None
+        default_app_tracker.record_launch(clean_name, executables[0], mock_proc)
+        return f"Application '{clean_name}' opened successfully ({executables[0]})."
+
     for exe in executables:
         try:
             proc = subprocess.Popen([exe])

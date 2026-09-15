@@ -191,11 +191,15 @@ class BrowserCapability:
     Selects structured Playwright/HTTP browser interaction first, falling back to desktop GUI when requested or necessary.
     """
     def __init__(self, provider=None):
+        self.custom_provider = provider
         self.playwright_provider = PlaywrightBrowserProvider()
         self.structured_provider = provider if provider else StructuredBrowserProvider()
         self.gui_provider = provider if provider else GUIFallbackBrowserProvider()
 
     def search(self, query, prefer_gui=False):
+        if self.custom_provider:
+            return self.custom_provider.search(query)
+
         if prefer_gui:
             return self.gui_provider.search(query)
 

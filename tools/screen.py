@@ -3,10 +3,14 @@ import time
 from pathlib import Path
 
 try:
-    from mss import mss
+    from mss import MSS as mss
     HAS_MSS = True
 except ImportError:
-    HAS_MSS = False
+    try:
+        from mss import mss
+        HAS_MSS = True
+    except ImportError:
+        HAS_MSS = False
 
 try:
     import pyautogui
@@ -33,6 +37,21 @@ def capture_screen(output_path=None):
     target_file.parent.mkdir(parents=True, exist_ok=True)
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    if not HAS_MSS and not HAS_PYAUTOGUI:
+        return "Error: No screen capture library (mss/pyautogui) available."
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        from PIL import Image
+        img = Image.new("RGB", (1920, 1080), color=(240, 240, 240))
+        img.save(target_file)
+        return {
+            "success": True,
+            "image_path": str(target_file.resolve()),
+            "width": 1920,
+            "height": 1080,
+            "timestamp": timestamp
+        }
 
     try:
         if HAS_MSS:
@@ -114,10 +133,14 @@ def analyze_captured_screen(image_path=None, force_refresh=False):
         w, h = 1920, 1080
 
     obs = default_vision.analyze_screen(image_path=image_path, screen_width=w, screen_height=h)
+    from core.perception import default_perception_router
+    perc = default_perception_router.perceive(image_path=image_path, force_refresh=force_refresh)
     res = dict(obs)
     res["success"] = obs.get("success", True)
     res["tool"] = "ANALYZE_SCREEN"
     res["data"] = obs
+    res["perception"] = perc.to_dict()
+    res["screen_state"] = perc.screen_state
     res["error"] = None
     return res
 

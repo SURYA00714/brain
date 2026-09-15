@@ -107,11 +107,17 @@ def perform_web_search_structured(query, max_results=3):
             "status": "ERROR_EMPTY_QUERY"
         }
 
-    # Try mature duckduckgo_search library first
+    # Try mature duckduckgo_search / ddgs library first
     try:
-        from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            raw_results = list(ddgs.text(clean_query, max_results=max_results * 2))
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS
+            with DDGS() as ddgs:
+                raw_results = list(ddgs.text(clean_query, max_results=max_results * 2))
             clean_results = []
             for r in raw_results:
                 link = clean_url(r.get("href") or r.get("link") or "")

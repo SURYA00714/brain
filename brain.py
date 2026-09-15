@@ -14,6 +14,11 @@ from tools.router import default_router
 from tools.browser import browser_search, browser_navigate, browser_search_foreground
 from tools.plan import ExecutionPlan, ExecutionStep
 from tools.input import validate_gui_action_safety
+from models.gateway import default_gateway
+from core.identity import default_identity
+from core.memory import default_memory
+from core.world_state import default_world_state
+from core.context import default_context_builder
 
 
 URL = "http://localhost:11434/api/generate"
@@ -23,7 +28,7 @@ ALLOWED_INTENTS = {
     "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "OPEN_BRAVE", "WEB_SEARCH",
     "BROWSER_SEARCH", "BROWSER_NAVIGATE", "BROWSER_SEARCH_FOREGROUND",
     "LIST_FILES", "FIND_FILES", "READ_TEXT_FILE", "CREATE_FOLDER",
-    "CHAT", "TIME", "SCREENSHOT", "ANALYZE_SCREEN"
+    "CHAT", "TIME", "SCREENSHOT", "ANALYZE_SCREEN", "REMEMBER"
 }
 
 # (skipping helper functions clean_search_query & parse_model_action)
@@ -194,13 +199,10 @@ def ask_brain(text):
     Backward-compatibility function for single-intent classification tests.
     Parses intent tuple (intent_name, arg) from model response.
     """
-    data = {"model": MODEL, "prompt": f"Classify: {text}", "stream": False}
-    try:
-        response = requests.post(URL, json=data, timeout=10)
-        response.raise_for_status()
-        raw_output = response.json().get("response", "").strip()
-    except Exception:
+    resp = default_gateway.generate(prompt=f"Classify: {text}", tier="LOCAL", timeout=10.0)
+    if not resp.success:
         return (None, None)
+    raw_output = resp.text.strip()
 
     action, _ = parse_model_action(raw_output)
     if not action:
@@ -247,8 +249,33 @@ def build_planner_prompt(user_request, history):
         tools_info += f"- {tool['name']}: {tool['description']}\n  Parameters: {tool['parameters']}\n"
 
     obs_text = ""
+    from core.perception import default_perception_router
+    last_perc = default_perception_router.get_last_result()
     current_obs = default_vision.get_current_observation()
-    if current_obs:
+
+    use_perc = False
+    if last_perc and not last_perc.is_stale(max_age_seconds=15):
+        if not current_obs or last_perc.timestamp >= current_obs.get("timestamp", 0):
+            use_perc = True
+
+    if use_perc:
+        obs_text = f"\nCURRENT SCREEN PERCEPTION (Source: {last_perc.source}, State: [{last_perc.screen_state}], App: {last_perc.application}):\n"
+        if last_perc.observations:
+            for o in last_perc.observations:
+                obs_text += f"- {o}\n"
+        elems = last_perc.detected_elements[:15]
+        if elems:
+            obs_text += f"<untrusted_data source=\"{last_perc.source}\">\nVisible Elements:\n"
+            for idx, elem in enumerate(elems, 1):
+                txt_disp = elem.get('text', '')
+                if len(txt_disp) > 30:
+                    txt_disp = txt_disp[:30] + "..."
+                conf = elem.get('confidence', 1.0)
+                obs_text += f"{idx}. [{elem.get('type', 'element')}] '{txt_disp}' center: ({elem.get('center_x')}, {elem.get('center_y')}) conf: {conf:.2f} ID: {elem.get('id')}\n"
+            obs_text += "</untrusted_data>\n"
+        else:
+            obs_text += "No visible elements detected on screen.\n"
+    elif current_obs:
         status = current_obs.get("status", "NO_OBSERVATION")
         scr = current_obs.get("screen", {})
         elems = current_obs.get("elements", [])
@@ -297,7 +324,9 @@ def build_planner_prompt(user_request, history):
 
             history_text += f"Step {idx}:\n  Requested Action: {json.dumps(step['action'])}\n  Execution Result: {formatted_res}\n"
 
-    prompt = f"""You are Brain, an intelligent PC Assistant. You achieve user goals by reasoning step-by-step using visual observations and requesting safe tool actions.
+    context_header = default_context_builder.build_system_context(user_request)
+
+    prompt = f"""{context_header}
 
 Available Tools:
 {tools_info}
@@ -441,6 +470,7 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
                 result = registry.execute(tool_name, args)
             t1 = time.time()
             profiler.record_tool(tool_name, t1 - t0, is_gui=(tool_name in ui_modifying_tools))
+            default_world_state.record_action_outcome(tool_name, args, result, verified=result.get("success", False))
 
             if result.get("success"):
                 plan.record_result(step_idx - 1, result, success=True)
@@ -453,27 +483,45 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
                 plan.record_result(step_idx - 1, result, success=False)
                 task_state.update_result(result, verification_status="FAILED")
 
-                # State-Based Bounded Recovery Check (Max 2 attempts)
+                # Adaptive State-Based Bounded Recovery Check (Max 2 attempts)
+                from core.recovery import default_recovery_manager
+                diag_code, diag_expl = default_recovery_manager.diagnose_failure(tool_name, args, result)
+
                 if plan.recovery_count < plan.max_recovery_attempts:
+                    strat = default_recovery_manager.determine_recovery_strategy(tool_name, args, diag_code, plan.recovery_count)
+                    if strat.get("action") == "HALT":
+                        plan.status = "FAILED"
+                        default_world_state.set_active_task(None)
+                        default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
+                        return f"Brain Error: Action '{tool_name}' failed. {diag_expl} ({strat.get('message')})"
+
                     plan.recovery_count += 1
                     if not quiet:
-                        print(f"Brain: Step '{tool_name}' failed ({result.get('error')}). Initiating state-based recovery (Attempt {plan.recovery_count}/{plan.max_recovery_attempts})...")
+                        print(f"Brain: Step '{tool_name}' failed ({result.get('error')}). Initiating recovery (Attempt {plan.recovery_count}/{plan.max_recovery_attempts}): {strat.get('message')}")
 
-                    # Attempt deterministic state recovery: if app was target, try FOCUS_APP
-                    if tool_name in ("HOTKEY", "TYPE_TEXT", "PRESS_KEY", "CLICK"):
-                        target_app = default_app_tracker.get_focused_app() or "brave"
+                    # Attempt state recovery based on diagnostic strategy
+                    if strat.get("action") == "REFOCUS":
+                        target_app = strat.get("target_app") or default_app_tracker.get_focused_app() or "brave"
                         focus_app(target_app)
-                        # Retry step once
-                        retry_res = registry.execute(tool_name, args)
-                        if retry_res.get("success"):
-                            plan.record_result(step_idx - 1, retry_res, success=True)
-                            last_tool_res = retry_res
-                            continue
+                    elif strat.get("action") == "REFRESH_PERCEPTION":
+                        analyze_captured_screen(force_refresh=True)
+
+                    # Retry step once
+                    retry_res = registry.execute(tool_name, args)
+                    default_world_state.record_action_outcome(tool_name, args, retry_res, verified=retry_res.get("success", False))
+                    if retry_res.get("success"):
+                        plan.record_result(step_idx - 1, retry_res, success=True)
+                        last_tool_res = retry_res
+                        continue
 
                 plan.status = "FAILED"
+                default_world_state.set_active_task(None)
+                default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
                 return f"Brain Error: Action '{tool_name}' failed ({result.get('error')}). Plan halted."
 
     plan.status = "COMPLETED"
+    default_world_state.set_active_task(None)
+    default_memory.record_event("PLAN", f"Goal: {user_request}", status="COMPLETED")
 
     # Derive response from last tool result if no explicit final step was provided
     if last_tool_res and last_tool_res.get("success"):
@@ -553,6 +601,13 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             args = fast_match.get("arguments", {})
             profiler.record_route("FAST_ROUTER", tool_name)
 
+            # Safety Gate check before FastRoute execution
+            is_safe, safety_err = validate_gui_action_safety(tool_name, args)
+            if not is_safe:
+                profiler.record_total()
+                profiler.log_summary(user_request, mode="AUTO", status="FAILED")
+                return f"Brain Error: {safety_err}"
+
             if not quiet:
                 print(f"Brain: [FastRoute] Executing {tool_name} with args {args}...")
 
@@ -587,8 +642,9 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                 elif tool_name in ("LIST_FILES", "FIND_FILES", "READ_TEXT_FILE"):
                     data_str = json.dumps(result.get("data"))
                     resp = f"Here are the file results: {data_str}"
-                elif tool_name == "WEB_SEARCH":
-                    resp = f"Search results:\n{result.get('data')}"
+                elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
+                    search_data = result.get("data") or result.get("results")
+                    resp = f"Search results:\n{search_data}"
                 elif tool_name == "ANALYZE_SCREEN":
                     raw_d = result.get("data")
                     if isinstance(raw_d, str) and raw_d:
@@ -606,6 +662,10 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                 profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
                 return resp
             else:
+                if tool_name == "REMEMBER" or (result.get("error") and "Safety Block:" in str(result.get("error"))):
+                    profiler.record_total()
+                    profiler.log_summary(user_request, mode="AUTO", status="FAILED")
+                    return f"Brain Error: {result.get('error')}"
                 if not quiet:
                     print(f"Brain: FastRoute for {tool_name} returned failure ({result.get('error')}). Falling back to planner loop.")
     else:
@@ -617,6 +677,10 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
     # Task State Isolation: guarantee fresh start for each independent user task
     default_vision.clear_observation()
     task_state = TaskState(user_request)
+
+    # Phase 11: World State & Task Context Sync
+    default_world_state.sync_from_system()
+    default_world_state.set_active_task(user_request)
 
     history = []
     step_count = 0
@@ -633,39 +697,41 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             print(f"PROMPT CHAR COUNT: {len(prompt)}")
             print(f"PROMPT ESTIMATED TOKENS: {len(prompt) // 4}")
 
-        data = {
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False
+        # Cognitive Multi-Model Gateway generation
+        t0 = time.time()
+        resp = default_gateway.generate(prompt=prompt, tier="AUTO", timeout=120.0)
+        t1 = time.time()
+        profiler.record_llm(t1 - t0)
+
+        if not resp.success:
+            task_state.task_status = "FAILED"
+            default_world_state.set_active_task(None)
+            default_memory.record_event("TASK", f"Goal: {user_request}", status="FAILED")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
+            return f"Brain Error: {resp.error}"
+
+        raw_output = resp.text.strip()
+        gen_ms = resp.duration_ms or ((t1 - t0) * 1000.0)
+
+        qwen_telemetry = {
+            "qwen_called": True,
+            "model": resp.model,
+            "endpoint": URL if resp.provider == "ollama" else resp.provider,
+            "provider": resp.provider,
+            "fallback_used": resp.fallback_used,
+            "request_started": t0,
+            "request_finished": t1,
+            "generation_time_ms": gen_ms,
+            "prompt_size": len(prompt),
+            "response_length": len(raw_output)
         }
+        if not quiet:
+            print(f"[QWEN_TELEMETRY] qwen_called=True model={resp.model} endpoint={URL if resp.provider == 'ollama' else resp.provider} gen_time_ms={gen_ms:.2f} prompt_chars={len(prompt)} resp_chars={len(raw_output)}")
 
-        try:
-            t0 = time.time()
-            response = requests.post(URL, json=data, timeout=120)
-            t1 = time.time()
-            profiler.record_llm(t1 - t0)
-            response.raise_for_status()
-            raw_output = response.json().get("response", "").strip()
-
-            if debug:
-                print(f"[DEBUG] OLLAMA RESPONSE DURATION: {t1 - t0:.2f}s")
-                print(f"[DEBUG] RAW QWEN RESPONSE: {raw_output}")
-
-        except requests.exceptions.ConnectionError:
-            task_state.task_status = "FAILED"
-            profiler.record_total()
-            profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
-            return "Brain Error: Could not connect to Ollama. Please verify Ollama is running at http://localhost:11434."
-        except requests.exceptions.Timeout:
-            task_state.task_status = "FAILED"
-            profiler.record_total()
-            profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
-            return "Brain Error: Ollama API request timed out."
-        except Exception as e:
-            task_state.task_status = "FAILED"
-            profiler.record_total()
-            profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
-            return f"Brain Error: Communication failure with Ollama ({type(e).__name__}: {str(e)})."
+        if debug:
+            print(f"[DEBUG] MODEL ({resp.provider}) RESPONSE DURATION: {t1 - t0:.2f}s")
+            print(f"[DEBUG] RAW MODEL RESPONSE: {raw_output}")
 
         action, err = parse_model_action(raw_output)
         if debug:
@@ -673,6 +739,8 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
 
         if err or not action:
             task_state.task_status = "FAILED"
+            default_world_state.set_active_task(None)
+            default_memory.record_event("TASK", f"Goal: {user_request}", status="FAILED")
             profiler.record_total()
             profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
             return f"Brain Error: Invalid model response ({err}). Request halted."
@@ -681,6 +749,8 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
 
         if action["type"] == "final":
             task_state.task_status = "COMPLETED"
+            default_world_state.set_active_task(None)
+            default_memory.record_event("TASK", f"Goal: {user_request}", status="COMPLETED")
             profiler.record_total()
             profiler.log_summary(user_request, mode=exec_mode, status="SUCCESS")
             return action.get("answer", "Task complete.")
@@ -747,20 +817,34 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                 non_progress_count += 1
 
             task_state.update_result(result, verification_status=verification_status)
+            default_world_state.record_action_outcome(tool_name, args, result, verified=result.get("success", False))
 
             # Bounded Recovery Check
             if not result.get("success"):
+                from core.recovery import default_recovery_manager
+                diag_code, diag_expl = default_recovery_manager.diagnose_failure(tool_name, args, result)
                 if task_state.recovery_attempts > MAX_RECOVERY_ATTEMPTS:
                     task_state.task_status = "FAILED"
+                    default_world_state.set_active_task(None)
+                    default_memory.record_event("TASK", f"Goal: {user_request}", status="FAILED")
                     profiler.record_total()
                     profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
-                    return f"Brain Error: Action '{tool_name}' failed after {task_state.recovery_attempts} recovery attempts ({result.get('error')}). Halting."
+                    return f"Brain Error: Action '{tool_name}' failed after {task_state.recovery_attempts} recovery attempts ({diag_expl}). Halting."
+
+                strat = default_recovery_manager.determine_recovery_strategy(tool_name, args, diag_code, max(0, task_state.recovery_attempts - 1))
                 if not quiet:
-                    print(f"Brain: Notice - Action '{tool_name}' failed (Attempt {task_state.recovery_attempts}/{MAX_RECOVERY_ATTEMPTS}). Initiating recovery...")
+                    print(f"Brain: Notice - Action '{tool_name}' failed (Attempt {task_state.recovery_attempts}/{MAX_RECOVERY_ATTEMPTS}). Recovery strategy: {strat.get('message')}")
+
+                if strat.get("action") == "REFOCUS":
+                    focus_app(strat.get("target_app") or "brave")
+                elif strat.get("action") == "REFRESH_PERCEPTION":
+                    analyze_captured_screen(force_refresh=True)
 
             # Progress & Loop Detection Check
             if non_progress_count >= 3:
                 task_state.task_status = "FAILED"
+                default_world_state.set_active_task(None)
+                default_memory.record_event("TASK", f"Goal: {user_request}", status="FAILED")
                 profiler.record_total()
                 profiler.log_summary(user_request, mode=exec_mode, status="FAILED")
                 return "Brain Error: Halting execution because 3 consecutive actions produced no progress toward completing the goal."
@@ -785,6 +869,8 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                         print(f"Brain: {result.get('data')}")
 
     profiler.record_total()
+    default_world_state.set_active_task(None)
+    default_memory.record_event("TASK", f"Goal: {user_request}", status="MAX_STEPS")
     profiler.log_summary(user_request, mode=exec_mode, status="MAX_STEPS")
     return f"Brain Notice: Maximum plan execution limit ({max_steps} steps) reached."
 

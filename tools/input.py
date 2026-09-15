@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -303,6 +304,9 @@ def type_text(text):
     safe, err = validate_gui_action_safety("TYPE_TEXT", {"text": text})
     if not safe:
         return err
+
+    if os.getenv("BRAIN_MOCK_GUI") == "1":
+        return {"typed_chars": len(text)}
 
     try:
         if HAS_PYAUTOGUI and pyautogui is not None:

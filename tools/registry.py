@@ -70,6 +70,16 @@ class ToolRegistry:
                 "error": f"Invalid arguments format for tool '{tool_name}'. Expected dictionary."
             }
 
+        from tools.input import validate_gui_action_safety
+        is_safe, safety_err = validate_gui_action_safety(tool.name, arguments)
+        if not is_safe:
+            return {
+                "success": False,
+                "tool": tool.name,
+                "data": None,
+                "error": safety_err
+            }
+
         try:
             # Map parameters based on tool function signature
             if tool.name == "OPEN_APP":
@@ -151,6 +161,12 @@ class ToolRegistry:
                 elem_id = arguments.get("element_id") or arguments.get("id") or ""
                 text = arguments.get("text", "")
                 result = tool.func(elem_id, text)
+            elif tool.name == "REMEMBER":
+                m_type = arguments.get("memory_type") or arguments.get("type") or "FACT"
+                sub = arguments.get("subject") or "user"
+                k = arguments.get("key") or arguments.get("name") or ""
+                v = arguments.get("value") or arguments.get("content") or ""
+                result = tool.func(m_type, sub, k, v)
             else:
                 result = tool.func(**arguments)
 
@@ -167,7 +183,7 @@ class ToolRegistry:
                     "error": result.get("error", "Tool execution reported failure.")
                 }
 
-            if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Access Denied:") or result.startswith("Safety Block:") or result.startswith("Brain Error:")):
+            if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Access Denied:") or result.startswith("Safety Block:") or result.startswith("Brain Error:") or result.startswith("Memory Error:")):
                 return {
                     "success": False,
                     "tool": tool.name,
@@ -374,5 +390,23 @@ default_registry.register(Tool(
     risk_level="LOW",
     func=get_current_time
 ))
+
+
+def remember_memory(memory_type="FACT", subject="user", key="", value=""):
+    from core.memory import default_memory
+    success, err = default_memory.add_memory(memory_type=memory_type, subject=subject, key=key, value=value)
+    if not success:
+        return f"Memory Error: {err}"
+    return f"Remembered {memory_type.lower()}: {key} = {value}"
+
+
+default_registry.register(Tool(
+    name="REMEMBER",
+    description="Stores a persistent user preference, fact, or decision into Brain's memory store.",
+    parameters={"memory_type": "string (FACT | PREFERENCE | DECISION)", "key": "string", "value": "string", "subject": "string (default: user)"},
+    risk_level="LOW",
+    func=remember_memory
+))
+
 
 

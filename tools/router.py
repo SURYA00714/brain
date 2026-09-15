@@ -33,6 +33,34 @@ class FastRouter:
         if norm_text in time_queries:
             return {"type": "tool", "tool": "TIME", "arguments": {}}
 
+        # 2b. Deterministic Memory Storage Queries (e.g. "remember that I prefer Python", "remember that my browser is Brave")
+        for prefix in ["remember that ", "remember "]:
+            if norm_text.startswith(prefix):
+                content = clean_text[len(prefix):].strip()
+                if content:
+                    is_pref = any(w in norm_text for w in ["prefer", "favorite", "like", "love", "hate", "dislike"])
+                    key_val = content
+                    m_key = "user_preference" if is_pref else "fact"
+                    if " is " in content:
+                        parts = content.split(" is ", 1)
+                        m_key = parts[0].strip().replace(" ", "_").lower()
+                        key_val = parts[1].strip()
+                    elif " prefers " in content:
+                        parts = content.split(" prefers ", 1)
+                        m_key = "preferred_choice"
+                        key_val = parts[1].strip()
+
+                    return {
+                        "type": "tool",
+                        "tool": "REMEMBER",
+                        "arguments": {
+                            "memory_type": "PREFERENCE" if is_pref else "FACT",
+                            "subject": "user",
+                            "key": m_key,
+                            "value": key_val
+                        }
+                    }
+
         # 3. Deterministic Compound Multi-Step Workflows (e.g. Open Brave & Search, Open + Observe, File Manager)
         # Check compound workflows BEFORE semantic triggers to build fast ExecutionPlans without Qwen
         from tools.plan import ExecutionPlan, ExecutionStep
