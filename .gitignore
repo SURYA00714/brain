@@ -7,3 +7,8 @@ logs/*.jpg
 logs/screenshots/
 models/
 .DS_Store
+.env
+.env.*
+*.env
+
+desktopmate/

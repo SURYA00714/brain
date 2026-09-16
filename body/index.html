@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brain Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="companion-container" id="companionRoot">
+    <!-- Header with status -->
+    <div class="header">
+      <div class="brand">
+        <span class="pulse-dot" id="statusDot"></span>
+        <span class="brand-name">BRAIN</span>
+      </div>
+      <div class="header-controls">
+        <button type="button" id="voiceToggleBtn" class="icon-btn" title="Voice Toggle">🔊</button>
+        <div class="status-badge" id="statusBadge">IDLE</div>
+      </div>
+    </div>
+
+    <!-- Avatar Character Canvas/SVG Area -->
+    <div class="avatar-area">
+      <div class="avatar-halo" id="avatarHalo"></div>
+      <svg class="avatar-svg" id="avatarSvg" viewBox="0 0 160 160">
+        <!-- Base Aura Ring -->
+        <circle cx="80" cy="80" r="70" class="halo-ring" />
+        
+        <!-- Companion Head Form -->
+        <rect x="30" y="32" width="100" height="96" rx="36" class="head-body" />
+        
+        <!-- Antenna / Cortex Node -->
+        <path d="M 80 32 L 80 16" class="antenna-stem" />
+        <circle cx="80" cy="14" r="6" class="antenna-node" id="antennaNode" />
+
+        <!-- Screen / Face Plate -->
+        <rect x="42" y="44" width="76" height="72" rx="22" class="face-plate" />
+
+        <!-- Eyes Group -->
+        <g id="eyesGroup" class="eyes-group">
+          <!-- Left Eye -->
+          <ellipse id="leftEye" cx="62" cy="74" rx="9" ry="12" class="eye" />
+          <circle id="leftPupil" cx="63" cy="74" r="4" class="pupil" />
+          
+          <!-- Right Eye -->
+          <ellipse id="rightEye" cx="98" cy="74" rx="9" ry="12" class="eye" />
+          <circle id="rightPupil" cx="99" cy="74" r="4" class="pupil" />
+        </g>
+
+        <!-- Expressive Mouth Line -->
+        <path id="mouthLine" d="M 70 98 Q 80 102 90 98" class="mouth" />
+      </svg>
+    </div>
+
+    <!-- Speech / Action Bubble -->
+    <div class="bubble-area">
+      <div class="status-text" id="statusText">Standing by. Ready for computer tasks.</div>
+    </div>
+
+    <!-- Interactive Input Bar -->
+    <form class="input-bar" id="commandForm">
+      <input type="text" id="commandInput" placeholder="Ask Brain or give command..." autocomplete="off" />
+      <button type="submit" id="sendBtn" title="Execute">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <script src="avatar.js"></script>
+</body>
+</html>

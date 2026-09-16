@@ -111,13 +111,21 @@ def perform_web_search_structured(query, max_results=3):
     try:
         import warnings
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
+            warnings.simplefilter("ignore")
             try:
                 from ddgs import DDGS
-            except ImportError:
-                from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                raw_results = list(ddgs.text(clean_query, max_results=max_results * 2))
+            except Exception:
+                try:
+                    from duckduckgo_search import DDGS
+                except Exception:
+                    DDGS = None
+            if DDGS is not None:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    with DDGS() as ddgs:
+                        raw_results = list(ddgs.text(clean_query, max_results=max_results * 2))
+            else:
+                raw_results = []
             clean_results = []
             for r in raw_results:
                 link = clean_url(r.get("href") or r.get("link") or "")
@@ -197,10 +205,50 @@ def perform_web_search(query, max_results=3):
         return f"No valid web search results found for '{query}'."
 
     formatted_output = [f"Search results for '{query}':"]
-    for idx, item in enumerate(results, 1):
-        formatted_output.append(
-            f"{idx}. {item.get('title', 'No title')}\n   Snippet: {item.get('snippet', 'No snippet')}\n   URL: {item.get('url', '')}"
-        )
-
     return "\n\n".join(formatted_output)
+
+
+def research_topic(query: str, max_results: int = 3) -> dict:
+    """
+    Intelligent web research workflow:
+    SEARCH -> COLLECT -> FILTER -> SYNTHESIZE
+    Returns structured research findings and grounded summary.
+    """
+    struct_res = perform_web_search_structured(query, max_results=max_results * 2)
+    if not struct_res.get("success") or not struct_res.get("results"):
+        return {
+            "success": False,
+            "query": query,
+            "findings": [],
+            "sources": [],
+            "retrieved_summary": f"Could not find web search information for '{query}'."
+        }
+
+    raw_results = struct_res.get("results", [])
+    findings = []
+    sources = []
+    seen_texts = set()
+
+    for item in raw_results:
+        snippet = item.get("snippet", "").strip()
+        title = item.get("title", "").strip()
+        url = item.get("url", "").strip()
+
+        if snippet and snippet not in seen_texts:
+            seen_texts.add(snippet)
+            findings.append(f"{title}: {snippet}")
+            if url and url not in sources:
+                sources.append(url)
+        if len(findings) >= max_results:
+            break
+
+    summary_text = "\n".join(f"- {f}" for f in findings)
+    return {
+        "success": True,
+        "query": query,
+        "findings": findings,
+        "sources": sources,
+        "retrieved_summary": summary_text
+    }
+
 

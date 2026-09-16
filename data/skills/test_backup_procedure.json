@@ -1,0 +1,37 @@
+{
+  "name": "test_backup_procedure",
+  "description": "Learned test backup",
+  "trigger_patterns": [
+    "run test backup",
+    "execute test backup"
+  ],
+  "required_capabilities": [],
+  "steps": [
+    {
+      "action": "LIST_FILES",
+      "arguments": {
+        "target_path": "Brain"
+      },
+      "expected_observation": null,
+      "verification_method": "none",
+      "allow_failure": false,
+      "description": ""
+    },
+    {
+      "action": "CHECK_DISK_SPACE",
+      "arguments": {
+        "target_path": "/"
+      },
+      "expected_observation": null,
+      "verification_method": "none",
+      "allow_failure": false,
+      "description": ""
+    }
+  ],
+  "verification_rules": [],
+  "failure_recovery": {},
+  "success_count": 0,
+  "failure_count": 0,
+  "is_learned": true,
+  "created_at": 1789573245.2886071
+}

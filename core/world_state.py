@@ -53,6 +53,10 @@ class WorldStateManager:
             last_verified_time=0.0
         )
 
+    def get_focused_app(self) -> Optional[str]:
+        """Returns the verified currently focused application name."""
+        return self.current_state.focused_app
+
     def sync_from_system(self) -> WorldState:
         """
         Reconciles world state against real system conditions.

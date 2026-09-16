@@ -1,0 +1,24 @@
+{
+  "avatar": {
+    "enabled": true,
+    "always_on_top": true,
+    "click_through": false,
+    "scale": 1.0,
+    "theme": "dark_glass",
+    "mouse_tracking": true,
+    "port": 8765
+  },
+  "voice": {
+    "enabled": true,
+    "provider": "auto",
+    "speed": 1.0,
+    "natural_pauses": true
+  },
+  "presence": {
+    "enabled": true,
+    "poll_interval_sec": 3.0
+  },
+  "debug": {
+    "enabled": false
+  }
+}

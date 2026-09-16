@@ -3,7 +3,7 @@ from tools.search import perform_web_search
 from tools.files import list_files, find_files, read_text_file, create_folder
 from tools.screen import capture_screen, analyze_captured_screen
 from tools.vision import default_vision
-from tools.browser import browser_search, browser_navigate
+from tools.browser import browser_search, browser_navigate, browser_search_foreground, click_first_search_result, browser_new_tab
 from tools.time_tool import get_current_time
 from tools.input import (
     move_mouse, click_mouse, double_click, scroll,
@@ -44,6 +44,11 @@ class ToolRegistry:
         if not name or not isinstance(name, str):
             return None
         return self._tools.get(name.upper())
+
+    def has_tool(self, name):
+        if not name or not isinstance(name, str):
+            return False
+        return name.upper() in self._tools
 
     def list_tools(self):
         return [tool.to_dict() for tool in self._tools.values()]
@@ -167,6 +172,11 @@ class ToolRegistry:
                 k = arguments.get("key") or arguments.get("name") or ""
                 v = arguments.get("value") or arguments.get("content") or ""
                 result = tool.func(m_type, sub, k, v)
+            elif tool.name == "CHECK_DISK_SPACE":
+                target_path = arguments.get("target_path") or "/"
+                result = tool.func(target_path)
+            elif tool.name == "NEW_TAB":
+                result = tool.func()
             else:
                 result = tool.func(**arguments)
 
@@ -376,6 +386,14 @@ default_registry.register(Tool(
 ))
 
 default_registry.register(Tool(
+    name="BROWSER_SEARCH_FOREGROUND",
+    description="Capability tool to execute a web search directly inside foreground Brave browser via address bar.",
+    parameters={"query": "string"},
+    risk_level="LOW",
+    func=browser_search_foreground
+))
+
+default_registry.register(Tool(
     name="BROWSER_NAVIGATE",
     description="Capability tool to navigate to a URL.",
     parameters={"url": "string"},
@@ -408,5 +426,84 @@ default_registry.register(Tool(
     func=remember_memory
 ))
 
+
+def check_disk_space(target_path="/"):
+    import shutil
+    try:
+        total, used, free = shutil.disk_usage(target_path)
+        total_gb = total / (1024 ** 3)
+        free_gb = free / (1024 ** 3)
+        used_pct = (used / total) * 100
+        return f"Disk space for '{target_path}': {free_gb:.1f} GB free of {total_gb:.1f} GB ({used_pct:.1f}% used)."
+    except Exception as e:
+        return f"Error reading disk usage: {e}"
+
+
+default_registry.register(Tool(
+    name="CHECK_DISK_SPACE",
+    description="Inspects storage filesystem and returns total, used, and free disk space.",
+    parameters={"target_path": "string (default: /)"},
+    risk_level="LOW",
+    func=check_disk_space
+))
+
+default_registry.register(Tool(
+    name="CLICK_FIRST_RESULT",
+    description="Clicks or navigates to the first search result on the screen or web browser.",
+    parameters={"query": "string"},
+    risk_level="LOW",
+    func=click_first_search_result
+))
+
+default_registry.register(Tool(
+    name="NEW_TAB",
+    description="Opens a new tab in the active or default browser window.",
+    parameters={},
+    risk_level="LOW",
+    func=browser_new_tab
+))
+
+# Register Phase 19 Structured DOM Computer-Use Tools
+from tools.computer_use import dom_click, dom_type, dom_extract_content, dom_select_result, dom_get_page_state
+
+default_registry.register(Tool(
+    name="DOM_CLICK",
+    description="Clicks a target DOM element on the active browser page by selector.",
+    parameters={"selector": "string", "timeout": "number (default: 5.0)"},
+    risk_level="MEDIUM",
+    func=dom_click
+))
+
+default_registry.register(Tool(
+    name="DOM_TYPE",
+    description="Types text into a DOM input element by selector.",
+    parameters={"selector": "string", "text": "string", "clear": "boolean (default: true)"},
+    risk_level="MEDIUM",
+    func=dom_type
+))
+
+default_registry.register(Tool(
+    name="DOM_EXTRACT_CONTENT",
+    description="Extracts structured text from a DOM element without OCR overhead.",
+    parameters={"selector": "string (default: body)", "max_length": "integer (default: 2000)"},
+    risk_level="LOW",
+    func=dom_extract_content
+))
+
+default_registry.register(Tool(
+    name="DOM_SELECT_RESULT",
+    description="Selects and navigates to the best matching search result link on the active page.",
+    parameters={"criteria": "string", "index": "integer (default: 0)"},
+    risk_level="MEDIUM",
+    func=dom_select_result
+))
+
+default_registry.register(Tool(
+    name="DOM_PAGE_STATE",
+    description="Inspects active browser DOM state: URL, title, readyState, and text length.",
+    parameters={},
+    risk_level="LOW",
+    func=dom_get_page_state
+))
 
 

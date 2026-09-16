@@ -38,6 +38,10 @@ class AdaptiveRecoveryManager:
         """
         err = str(result.get("error") or "")
 
+        # 0. Unregistered / Invalid Tool Check
+        if "not registered" in err.lower() or "invalid tool" in err.lower() or "does not exist" in err.lower():
+            return "INVALID_TOOL", f"Tool '{tool_name}' does not exist in Brain's registered capabilities."
+
         # 1. Safety Block Check
         if "Safety Block" in err or "Access Denied" in err:
             return "ACTION_BLOCKED_BY_SAFETY", f"Action '{tool_name}' was blocked by the deterministic safety controller: {err}"
@@ -75,6 +79,14 @@ class AdaptiveRecoveryManager:
         Determines the appropriate bounded recovery action based on diagnostic reason.
         Returns recovery instruction dict: {"action": "RETRY" | "REFOCUS" | "WAIT" | "HALT", ...}
         """
+        if reason_code == "INVALID_TOOL":
+            from tools.registry import default_registry
+            available_tools = ", ".join(sorted(t["name"] for t in default_registry.list_tools()))
+            return {
+                "action": "REPLAN",
+                "message": f"Tool '{tool_name}' is not registered. Available tools: {available_tools}."
+            }
+
         if attempt >= self.max_recovery_attempts:
             return {
                 "action": "HALT",

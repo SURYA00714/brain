@@ -1,6 +1,7 @@
 import os
 import re
 from pathlib import Path
+from typing import Tuple, Optional, Any, Dict, List
 
 try:
     import pyautogui
@@ -207,6 +208,58 @@ def validate_gui_action_safety(tool_name, args):
                     return False, "Safety Block: Action-chain submitting text execution in terminal context requires explicit user confirmation."
 
     return True, None
+
+
+def screen_prompt_safety(user_request: str) -> Tuple[bool, Optional[str]]:
+    """
+    Zero-Latency Immediate Safety Screen (<1ms).
+    Evaluates incoming raw user request before invoking any LLM, planner, or tool.
+    Detects explicitly destructive system actions and returns (is_safe, error_message).
+    """
+    if not user_request or not isinstance(user_request, str):
+        return True, None
+
+    normalized = re.sub(r"\s+", " ", user_request).strip().lower()
+
+    # Guard harmless educational/informational queries (e.g. "how does rm -rf work?", "explain disk formatting")
+    if any(normalized.startswith(q) for q in ["how does ", "explain ", "what is ", "why is ", "tell me about ", "describe "]):
+        return True, None
+
+    # 1. Destructive File System & Intent Categories
+    destructive_intents = [
+        "delete all my files", "delete all files", "delete my files", "delete system files",
+        "delete all system files", "destroy system", "destroy system files", "wipe all files",
+        "wipe the disk", "wipe disk", "format my drive", "format the drive", "format drive", "format all",
+        "erase my entire home directory", "erase home directory", "erase my home directory",
+        "remove everything from my computer", "remove everything from computer"
+    ]
+    if any(intent in normalized for intent in destructive_intents):
+        return False, "Brain Safety Block: Destructive mass file deletion or system wipe is prohibited by safety policy."
+
+    words = normalized.split()
+    is_rm = any(w in ("rm", "/bin/rm", "/usr/bin/rm") or w.endswith("/rm") for w in words)
+    if is_rm:
+        has_recursive = any(w in ("--recursive", "-r", "-R") or re.search(r"^-[a-z]*r[a-z]*$", w) for w in words)
+        has_force = any(w in ("--force", "-f") or re.search(r"^-[a-z]*f[a-z]*$", w) for w in words)
+        has_root_path = any(w in ("/", "/*", "/etc", "/root", "/boot", "/dev", "/usr", "..") or (len(w) > 1 and w.startswith("/")) for w in words[1:])
+        if (has_recursive and has_force) or (has_recursive and has_root_path) or (has_force and has_root_path):
+            return False, "Brain Safety Block: Destructive recursive file deletion is prohibited by safety policy."
+
+    # 2. Disk and Hardware Destruction
+    destructive_patterns = [
+        r"\bdd\b\s+if=",
+        r"\bmkfs\b",
+        r"\bformat\s+(?:disk|partition|drive|[a-z]:)",
+        r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:",  # Fork bomb
+        r"\b(?:shutdown|reboot|poweroff)\b",
+        r"\binit\s+[06]\b"
+    ]
+    for pattern in destructive_patterns:
+        if re.search(pattern, normalized):
+            return False, f"Brain Safety Block: Destructive administrative command (matching '{pattern}') is prohibited."
+
+    return True, None
+
 
 
 

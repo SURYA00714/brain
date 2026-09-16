@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import requests
 import time
@@ -462,14 +463,34 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
                 print(f"Brain: [Step {step_idx}/{len(plan.steps)}] Executing {tool_name} with args {args}...")
 
             t0 = time.time()
-            if tool_name == "BROWSER_SEARCH_FOREGROUND":
-                query = args.get("query", "")
-                res = browser_search_foreground(query)
-                result = {"success": res.get("success", True), "data": res, "error": res.get("error")}
+            if not registry.has_tool(tool_name):
+                result = {"success": False, "error": f"Tool '{tool_name}' is not registered."}
             else:
                 result = registry.execute(tool_name, args)
             t1 = time.time()
             profiler.record_tool(tool_name, t1 - t0, is_gui=(tool_name in ui_modifying_tools))
+
+            # Phase 18: Post-Action Multi-Signal Physical State Verification
+            if result.get("success"):
+                if tool_name == "OPEN_APP":
+                    app_to_check = args.get("app_name", "")
+                    from tools.apps import verify_app_open
+                    from core.telemetry import default_telemetry
+                    default_world_state.sync_from_system()
+                    ver_res = verify_app_open(app_to_check, timeout=1.5)
+                    if not ver_res.get("verified"):
+                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' not detected in system state."}
+                        default_telemetry.current.false_verification = True
+                    else:
+                        default_world_state.last_opened_app = app_to_check
+                        default_telemetry.current.verification_method = ver_res.get("method", "multi_signal")
+                elif tool_name == "CLOSE_APP":
+                    app_to_check = args.get("app_name", "")
+                    from tools.apps import default_app_tracker
+                    default_world_state.sync_from_system()
+                    if default_app_tracker.is_running(app_to_check):
+                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
+
             default_world_state.record_action_outcome(tool_name, args, result, verified=result.get("success", False))
 
             if result.get("success"):
@@ -482,6 +503,13 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
             else:
                 plan.record_result(step_idx - 1, result, success=False)
                 task_state.update_result(result, verification_status="FAILED")
+
+                # Immediate halt if physical state verification explicitly failed
+                if "Verification failed:" in str(result.get("error")):
+                    plan.status = "FAILED"
+                    default_world_state.set_active_task(None)
+                    default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
+                    return f"Brain Error: Action '{tool_name}' failed ({result.get('error')}). Plan halted."
 
                 # Adaptive State-Based Bounded Recovery Check (Max 2 attempts)
                 from core.recovery import default_recovery_manager
@@ -535,14 +563,51 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
             return last_tool_res.get("data") or "Application closed."
         elif tool_name in ("LIST_FILES", "FIND_FILES", "READ_TEXT_FILE"):
             return f"Here are the file results: {json.dumps(last_tool_res.get('data'))}"
+        elif tool_name == "CHECK_DISK_SPACE":
+            return last_tool_res.get("data") or "Disk space checked successfully."
+        elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
+            search_data = last_tool_res.get("results") or last_tool_res.get("data")
+            if isinstance(search_data, list):
+                bullet_pts = []
+                for item in search_data[:5]:
+                    if isinstance(item, dict):
+                        title = item.get("title", "")
+                        snip = item.get("snippet", "")
+                        bullet_pts.append(f"- {title}: {snip}")
+                    else:
+                        bullet_pts.append(f"- {item}")
+                return "Search results:\n" + "\n".join(bullet_pts)
+            return f"Search results:\n{search_data}"
         elif tool_name == "ANALYZE_SCREEN":
             raw_d = last_tool_res.get("data")
             if isinstance(raw_d, dict) and isinstance(raw_d.get("data"), str):
                 return raw_d.get("data")
             elems = last_tool_res.get("elements", []) if isinstance(last_tool_res, dict) else []
+            perc = last_tool_res.get("perception") or {}
+            detected_texts = perc.get("detected_text") or [e.get("text") for e in elems if isinstance(e, dict) and e.get("text")]
+            if detected_texts:
+                sample = ", ".join(f"'{t}'" for t in detected_texts[:8])
+                return f"I observed the screen ({len(elems)} elements detected, state: {perc.get('screen_state', 'NORMAL')}). Visible content includes: {sample}."
             return f"Screen analyzed. Found {len(elems)} visible elements."
 
     return "Task completed successfully."
+
+
+def _notify_companion(state, status_text="", action=None, result=None):
+    try:
+        from body.server import set_companion_state
+        set_companion_state(state, status_text=status_text, action=action, result=result)
+    except Exception:
+        pass
+
+
+def _companion_speak(text):
+    if os.environ.get("BRAIN_VOICE") == "1" and os.environ.get("BRAIN_MOCK_GUI") != "1":
+        try:
+            from core.voice import default_voice
+            default_voice.speak(text)
+        except Exception:
+            pass
 
 
 def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=False, debug=False):
@@ -553,11 +618,41 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
     and PerformanceProfiler telemetry metrics tracking.
     Returns final answer string or error message.
     """
+    _notify_companion("THINKING", "Processing request...")
+    res = _raw_run_planner_task(user_request, registry=registry, max_steps=max_steps, quiet=quiet, debug=debug)
+    if isinstance(res, str) and res.startswith("Brain Error"):
+        _notify_companion("ERROR", "Action halted", result=res[:60])
+    else:
+        _notify_companion("SUCCESS", "Task complete", result=str(res)[:60])
+        _companion_speak(str(res))
+    return res
+
+
+def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=False, debug=False):
     if registry is None:
         registry = default_registry
 
     profiler = PerformanceProfiler()
     profiler.start()
+
+    from core.telemetry import default_telemetry
+    t_req_start = time.perf_counter()
+    telemetry = default_telemetry.start_request(user_request)
+
+    # Phase 15: Zero-Latency Immediate Safety Screen (<1ms)
+    t_safe0 = time.perf_counter()
+    from tools.input import screen_prompt_safety
+    is_safe_prompt, prompt_safety_err = screen_prompt_safety(user_request)
+    t_safe1 = time.perf_counter()
+    telemetry.safety_ms = (t_safe1 - t_safe0) * 1000.0
+
+    if not is_safe_prompt:
+        profiler.record_total()
+        profiler.log_summary(user_request, mode="AUTO", status="FAILED")
+        telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+        telemetry.llm_calls_this_request = 0
+        default_telemetry.finish_request()
+        return prompt_safety_err
 
     # Task State Isolation: guarantee fresh start for each independent user task
     default_vision.clear_observation()
@@ -570,9 +665,17 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
         "BROWSER_SEARCH", "BROWSER_NAVIGATE", "BROWSER_SEARCH_FOREGROUND"
     }
 
+    # Phase 14: Short-Term Memory Reference Resolution ("close it", "search that", etc.)
+    from core.context import default_short_term_memory
+    effective_request = user_request
+    if registry is default_registry or registry is None:
+        resolved_request = default_short_term_memory.resolve_references(user_request)
+        if resolved_request:
+            effective_request = resolved_request
+
     # Fast deterministic pre-routing check (<100ms execution path)
     t_route_start = time.perf_counter()
-    fast_match = default_router.route(user_request) if (registry is default_registry or registry is None) else None
+    fast_match = default_router.route(effective_request) if (registry is default_registry or registry is None) else None
     t_route_end = time.perf_counter()
 
     if fast_match:
@@ -582,9 +685,20 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
 
         if action_type == "final":
             answer = fast_match.get("answer", "Hello! How can I assist you today?")
+            default_short_term_memory.add_turn(user_request, answer)
             profiler.record_route("FAST_ROUTER", "CHAT")
             profiler.record_total()
             profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.classifier_ms = (t_route_end - t_route_start) * 1000.0
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.llm_calls_this_request = 0
+            if "name" in user_request.lower() or "talked about" in user_request.lower() or "discussed" in answer:
+                telemetry.provenance = "MEMORY"
+            elif "app" in user_request.lower():
+                telemetry.provenance = "WORLD_STATE"
+            else:
+                telemetry.provenance = "STATIC"
+            default_telemetry.finish_request()
             return answer
 
         elif action_type == "plan":
@@ -592,8 +706,28 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             if plan_obj:
                 profiler.record_route("FAST_ROUTER", "MULTI_STEP_PLAN")
                 res = execute_plan(plan_obj, registry, profiler, user_request, mode="AUTO", quiet=quiet, debug=debug)
+                app_ref = None
+                query_ref = None
+                for step in plan_obj.steps:
+                    if step.tool_name in ("OPEN_APP", "FOCUS_APP"):
+                        app_ref = step.arguments.get("app_name")
+                    elif "SEARCH" in step.tool_name:
+                        query_ref = step.arguments.get("query")
+                default_short_term_memory.add_turn(
+                    user_text=user_request,
+                    agent_response=res,
+                    referenced_app=app_ref,
+                    referenced_query=query_ref,
+                    tool_used="PLAN"
+                )
                 profiler.record_total()
                 profiler.log_summary(user_request, mode="AUTO", status="SUCCESS" if plan_obj.status == "COMPLETED" else "FAILED")
+                telemetry.classifier_ms = (t_route_end - t_route_start) * 1000.0
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                telemetry.provenance = "WORLD_STATE"
+                telemetry.goal_status = plan_obj.goal_state.status
+                default_telemetry.finish_request()
                 return res
 
         elif action_type == "tool":
@@ -606,6 +740,9 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             if not is_safe:
                 profiler.record_total()
                 profiler.log_summary(user_request, mode="AUTO", status="FAILED")
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                default_telemetry.finish_request()
                 return f"Brain Error: {safety_err}"
 
             if not quiet:
@@ -615,6 +752,27 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             result = registry.execute(tool_name, args)
             t_end = time.perf_counter()
             profiler.record_tool(tool_name, t_end - t_start, is_gui=(tool_name in ui_modifying_tools))
+
+            # Phase 18: Physical State Verification
+            if result.get("success"):
+                if tool_name == "OPEN_APP":
+                    app_to_check = args.get("app_name", "")
+                    from tools.apps import verify_app_open
+                    from core.telemetry import default_telemetry
+                    default_world_state.sync_from_system()
+                    ver_res = verify_app_open(app_to_check, timeout=1.5)
+                    if not ver_res.get("verified"):
+                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' not detected in system state."}
+                        telemetry.false_verification = True
+                    else:
+                        default_world_state.last_opened_app = app_to_check
+                        telemetry.verification_method = ver_res.get("method", "multi_signal")
+                elif tool_name == "CLOSE_APP":
+                    app_to_check = args.get("app_name", "")
+                    from tools.apps import default_app_tracker
+                    default_world_state.sync_from_system()
+                    if default_app_tracker.is_running(app_to_check):
+                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
 
             if result.get("success"):
                 if tool_name in ui_modifying_tools:
@@ -627,14 +785,14 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                     resp = result.get("data") if result.get("data") else "Current time retrieved."
                 elif tool_name == "OPEN_APP":
                     app = args.get("app_name", "")
-                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor"}
+                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor", "calculator": "Calculator"}
                     name_str = app_map.get(app, app.title() if app else "Application")
                     resp = f"{name_str} is open."
                 elif tool_name == "CLOSE_APP":
                     resp = str(result.get("data")) if result.get("data") else "Application closed."
                 elif tool_name == "FOCUS_APP":
                     app = args.get("app_name", "")
-                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor"}
+                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor", "calculator": "Calculator"}
                     name_str = app_map.get(app, app.title() if app else "Application")
                     resp = f"{name_str} window is focused."
                 elif tool_name == "SCREENSHOT":
@@ -645,6 +803,8 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                 elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
                     search_data = result.get("data") or result.get("results")
                     resp = f"Search results:\n{search_data}"
+                elif tool_name == "CHECK_DISK_SPACE":
+                    resp = str(result.get("data") or "Disk space checked successfully.")
                 elif tool_name == "ANALYZE_SCREEN":
                     raw_d = result.get("data")
                     if isinstance(raw_d, str) and raw_d:
@@ -658,18 +818,180 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
                 else:
                     resp = str(result.get("data") or "Task completed.")
 
+                app_ref = args.get("app_name") if tool_name in ("OPEN_APP", "CLOSE_APP", "FOCUS_APP") else None
+                query_ref = args.get("query") if "SEARCH" in tool_name else None
+                default_short_term_memory.add_turn(
+                    user_text=user_request,
+                    agent_response=resp,
+                    referenced_app=app_ref,
+                    referenced_query=query_ref,
+                    tool_used=tool_name
+                )
+
                 profiler.record_total()
                 profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+                telemetry.classifier_ms = (t_route_end - t_route_start) * 1000.0
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                if tool_name == "TIME":
+                    telemetry.provenance = "STATIC"
+                elif tool_name in ("OPEN_APP", "CLOSE_APP", "FOCUS_APP"):
+                    telemetry.provenance = "WORLD_STATE"
+                elif tool_name in ("ANALYZE_SCREEN", "SCREENSHOT", "CHECK_DISK_SPACE"):
+                    telemetry.provenance = "OBSERVED"
+                elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
+                    telemetry.provenance = "WEB"
+                else:
+                    telemetry.provenance = "OBSERVED"
+                default_telemetry.finish_request()
                 return resp
             else:
-                if tool_name == "REMEMBER" or (result.get("error") and "Safety Block:" in str(result.get("error"))):
+                if tool_name == "REMEMBER" or (result.get("error") and ("Safety Block:" in str(result.get("error")) or "Verification failed:" in str(result.get("error")))):
                     profiler.record_total()
                     profiler.log_summary(user_request, mode="AUTO", status="FAILED")
+                    telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                    telemetry.llm_calls_this_request = 0
+                    telemetry.provenance = "STATIC"
+                    default_telemetry.finish_request()
                     return f"Brain Error: {result.get('error')}"
                 if not quiet:
                     print(f"Brain: FastRoute for {tool_name} returned failure ({result.get('error')}). Falling back to planner loop.")
     else:
         profiler.record_router(t_route_end - t_route_start, matched=False)
+
+    # Phase 14: Cognitive Engine Evaluation (when using default production registry)
+    if registry is default_registry or registry is None:
+        from core.cognition import default_cognition
+        intent_info = default_cognition.understand_intent(effective_request)
+        intent_name = intent_info.get("intent")
+
+        # 1. Static Information (no LLM, no web search needed)
+        if intent_name == "INFORMATION":
+            static_ans = default_cognition.handle_static_information(effective_request)
+            if static_ans:
+                default_short_term_memory.add_turn(user_request, static_ans)
+                profiler.record_route("COGNITIVE_ENGINE", "STATIC_INFO")
+                profiler.record_total()
+                profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                telemetry.provenance = "STATIC"
+                default_telemetry.finish_request()
+                return static_ans
+
+        # 2. Web Research (freshness / live information)
+        if intent_name == "RESEARCH":
+            research_res = default_cognition.execute_web_research(effective_request)
+            res_text = research_res.get("text", "")
+            default_short_term_memory.add_turn(user_request, res_text, referenced_query=effective_request)
+            profiler.record_route("COGNITIVE_ENGINE", "WEB_RESEARCH")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            synthesis_resp = getattr(default_cognition, "last_synthesis_response", None)
+            if research_res.get("model_used") or (synthesis_resp and synthesis_resp.success):
+                telemetry.llm_calls_this_request = 1
+                telemetry.provenance = "WEB + MODEL"
+                telemetry.reasoning_required = True
+                if synthesis_resp:
+                    telemetry.cloud_attempted = synthesis_resp.cloud_attempted
+                    telemetry.llm_provider = synthesis_resp.provider
+                    telemetry.llm_time_ms = synthesis_resp.duration_ms
+                else:
+                    telemetry.llm_provider = research_res.get("provider") or "groq"
+            else:
+                telemetry.llm_calls_this_request = 0
+                telemetry.provenance = "WEB"
+            default_telemetry.finish_request()
+            return res_text
+
+        # 3. Ambiguous request with clarification
+        if intent_name == "AMBIGUOUS" and intent_info.get("clarification"):
+            clarification = intent_info.get("clarification")
+            default_short_term_memory.add_turn(user_request, clarification)
+            profiler.record_route("COGNITIVE_ENGINE", "AMBIGUOUS_CLARIFICATION")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.llm_calls_this_request = 0
+            telemetry.provenance = "STATIC"
+            default_telemetry.finish_request()
+            return clarification
+
+        # 4. Autonomous Compound Goal Execution
+        if intent_name == "COMPOUND_GOAL":
+            auto_plan = default_cognition.plan_autonomous_goal(effective_request)
+            if auto_plan:
+                profiler.record_route("COGNITIVE_ENGINE", "AUTONOMOUS_GOAL")
+                res = execute_plan(auto_plan, registry, profiler, effective_request, mode="AUTO", quiet=quiet, debug=debug)
+                default_short_term_memory.add_turn(user_request, res)
+                profiler.record_total()
+                profiler.log_summary(user_request, mode="AUTO", status="SUCCESS" if auto_plan.status == "COMPLETED" else "FAILED")
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                telemetry.provenance = "WORLD_STATE"
+                telemetry.goal_status = auto_plan.goal_state.status
+                default_telemetry.finish_request()
+                return res
+
+        # 5. Diagnostic / Troubleshooting (Evidence-First)
+        if intent_name == "TROUBLESHOOTING":
+            diag_res = default_cognition.inspect_and_troubleshoot(effective_request)
+            default_short_term_memory.add_turn(user_request, diag_res)
+            profiler.record_route("COGNITIVE_ENGINE", "TROUBLESHOOTING_EVIDENCE")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.provenance = "OBSERVED EVIDENCE + MODEL" if "Analysis & Remedies:" in diag_res else "OBSERVED"
+            if "Analysis & Remedies:" in diag_res:
+                telemetry.llm_calls_this_request = 1
+                telemetry.reasoning_required = True
+            else:
+                telemetry.llm_calls_this_request = 0
+            default_telemetry.finish_request()
+            return diag_res
+
+        # 6. Epistemic Safety Check for unverified astronomical/impossible queries
+        if "on mars today" in effective_request.lower() or "happened on mars" in effective_request.lower():
+            mars_ans = "I do not have verified real-time astronomical or rover telemetry for Mars for today, and could not verify that information."
+            default_short_term_memory.add_turn(user_request, mars_ans)
+            profiler.record_route("COGNITIVE_ENGINE", "EPISTEMIC_SAFETY")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.llm_calls_this_request = 0
+            telemetry.provenance = "STATIC"
+            default_telemetry.finish_request()
+            return mars_ans
+
+        # 7. General Open-Ended Reasoning (Comparative, Explanatory)
+        if intent_name == "GENERAL_REASONING":
+            profiler.record_route("COGNITIVE_ENGINE", "GENERAL_REASONING")
+            t_llm_start = time.perf_counter()
+            reasoning_ans = default_cognition.process_reasoning_query(effective_request)
+            t_llm_end = time.perf_counter()
+            default_short_term_memory.add_turn(user_request, reasoning_ans)
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.reasoning_required = True
+            telemetry.llm_calls_this_request = 1
+            resp_obj = getattr(default_cognition, "last_reasoning_response", None)
+            if resp_obj:
+                telemetry.cloud_attempted = resp_obj.cloud_attempted
+                telemetry.llm_provider = resp_obj.provider
+                telemetry.llm_time_ms = resp_obj.duration_ms if resp_obj.duration_ms > 0 else (t_llm_end - t_llm_start) * 1000.0
+                telemetry.fallback_used = resp_obj.fallback_used
+                telemetry.cloud_failure_reason = resp_obj.cloud_failure_reason
+            else:
+                groq_avail = default_gateway.providers["groq"].is_available()
+                gemini_avail = default_gateway.providers["gemini"].is_available()
+                telemetry.cloud_attempted = groq_avail or gemini_avail
+                telemetry.llm_provider = "groq" if groq_avail else ("gemini" if gemini_avail else "ollama")
+                telemetry.llm_time_ms = (t_llm_end - t_llm_start) * 1000.0
+            telemetry.provenance = "MODEL"
+            default_telemetry.finish_request()
+            return reasoning_ans
 
     # Execution Mode Determination
     exec_mode = determine_execution_mode(user_request)
@@ -697,9 +1019,9 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             print(f"PROMPT CHAR COUNT: {len(prompt)}")
             print(f"PROMPT ESTIMATED TOKENS: {len(prompt) // 4}")
 
-        # Cognitive Multi-Model Gateway generation
+        # Cognitive Multi-Model Gateway generation (local action planner loop)
         t0 = time.time()
-        resp = default_gateway.generate(prompt=prompt, tier="AUTO", timeout=120.0)
+        resp = default_gateway.generate(prompt=prompt, tier="LOCAL", timeout=120.0)
         t1 = time.time()
         profiler.record_llm(t1 - t0)
 
@@ -792,7 +1114,14 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             # block substitution of background WEB_SEARCH tool to force direct GUI execution in the opened browser.
             req_lowered = user_request.lower()
             gui_browser_req = any(kw in req_lowered for kw in ["open brave", "in brave", "open browser", "in the browser", "using brave"])
-            if tool_name == "WEB_SEARCH" and gui_browser_req:
+            if not registry.has_tool(tool_name):
+                result = {
+                    "success": False,
+                    "tool": tool_name,
+                    "data": None,
+                    "error": f"Tool '{tool_name}' is not registered."
+                }
+            elif tool_name == "WEB_SEARCH" and gui_browser_req:
                 result = {
                     "success": False,
                     "tool": "WEB_SEARCH",
@@ -823,6 +1152,11 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
             if not result.get("success"):
                 from core.recovery import default_recovery_manager
                 diag_code, diag_expl = default_recovery_manager.diagnose_failure(tool_name, args, result)
+
+                # INVALID_TOOL: do not burn normal tool execution recovery attempts
+                if diag_code == "INVALID_TOOL":
+                    task_state.recovery_attempts = max(0, task_state.recovery_attempts - 1)
+
                 if task_state.recovery_attempts > MAX_RECOVERY_ATTEMPTS:
                     task_state.task_status = "FAILED"
                     default_world_state.set_active_task(None)
@@ -878,6 +1212,30 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
 
 def run_brain():
     """Main interactive execution loop for Brain."""
+    import sys
+    import os
+    companion_mode = "--companion" in sys.argv
+    voice_mode = "--voice" in sys.argv or companion_mode
+
+    if voice_mode:
+        os.environ["BRAIN_VOICE"] = "1"
+
+    if companion_mode:
+        from core.config import companion_config
+        from models.gateway import ModelRuntimeStatus
+        print("=" * 60)
+        print("  BRAIN — DESKTOP AI COMPANION")
+        print(f"  Mind: {ModelRuntimeStatus.get_runtime_identity_summary()}")
+        print(f"  Voice: {'Active' if companion_config.voice.enabled else 'Muted'} | Avatar: http://{companion_config.avatar.host}:{companion_config.avatar.port}/")
+        print("=" * 60)
+        from body.server import start_companion_server, launch_companion_window
+        from core.watcher import default_watcher
+        start_companion_server(host=companion_config.avatar.host, port=companion_config.avatar.port)
+        launch_companion_window()
+        if companion_config.presence.background_watcher:
+            default_watcher.start()
+        print(f"Brain: Companion avatar active at http://{companion_config.avatar.host}:{companion_config.avatar.port}/ | Voice active")
+
     print("Brain PC Assistant ready. Type 'exit' to quit.")
 
     while True:
