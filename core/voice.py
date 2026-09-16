@@ -123,10 +123,20 @@ class LinuxNativeTTS(BaseVoiceProvider):
 
         def _run():
             try:
+                wav_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scratch", "tts.wav"))
+                os.makedirs(os.path.dirname(wav_path), exist_ok=True)
+                
                 if self.engine == "spd-say":
+                    # spd-say doesn't easily output wav by default, fallback to playing
                     subprocess.run(["spd-say", "-r", "10", "-p", "5", clean_text], timeout=15)
                 elif self.engine == "espeak-ng":
-                    subprocess.run(["espeak-ng", "-s", "175", "-p", "50", clean_text], timeout=15)
+                    # Save to WAV first
+                    subprocess.run(["espeak-ng", "-s", "175", "-p", "50", "-w", wav_path, clean_text], timeout=15)
+                    # Notify Desktop Mate Bridge via Event Bus
+                    from core.companion_state import default_companion_state
+                    default_companion_state.broadcast("OS_EVENT", {"type": "VOICE_READY", "file": wav_path})
+                    # Play locally as fallback/sync
+                    subprocess.run(["aplay", wav_path], timeout=15)
             except Exception:
                 pass
 

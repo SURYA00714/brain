@@ -77,36 +77,30 @@ class CompanionConfig:
 
     @property
     def avatar(self):
-        class SectionView:
-            def __init__(self, data):
-                self.__dict__.update(data)
-            def get(self, k, default=None):
-                return getattr(self, k, default)
-            def __getattr__(self, name):
-                return None
-        return SectionView(self._data.get("avatar", {}))
+        return self._get_section_view("avatar")
 
     @property
     def voice(self):
-        class SectionView:
-            def __init__(self, data):
-                self.__dict__.update(data)
-            def get(self, k, default=None):
-                return getattr(self, k, default)
-            def __getattr__(self, name):
-                return None
-        return SectionView(self._data.get("voice", {}))
+        return self._get_section_view("voice")
 
     @property
     def presence(self):
+        return self._get_section_view("presence")
+
+    def _get_section_view(self, section: str):
+        # Merge fallback with actual data
+        merged = dict(FALLBACK_CONFIG.get(section, {}))
+        merged.update(self._data.get(section, {}))
+        
         class SectionView:
             def __init__(self, data):
                 self.__dict__.update(data)
             def get(self, k, default=None):
-                return getattr(self, k, default)
+                return self.__dict__.get(k, default)
             def __getattr__(self, name):
                 return None
-        return SectionView(self._data.get("presence", {}))
+                
+        return SectionView(merged)
 
 
 default_config = CompanionConfig()

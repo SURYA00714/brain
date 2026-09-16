@@ -1,5 +1,5 @@
 {
-  "active_goal_id": "goal_1789573245",
+  "active_goal_id": "goal_1789578435",
   "goals": {
     "goal_1789567964": {
       "id": "goal_1789567964",
@@ -179,6 +179,35 @@
       "next_action": "Design HTML/CSS frontend",
       "created_at": 1789573245.2877126,
       "updated_at": 1789573245.2877126
+    },
+    "goal_1789578435": {
+      "id": "goal_1789578435",
+      "objective": "Build desktop companion avatar",
+      "status": "RUNNING",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Design HTML/CSS frontend",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        },
+        {
+          "id": 2,
+          "title": "Implement HTTP backend server",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        }
+      ],
+      "current_subtask_idx": 0,
+      "evidence": [],
+      "last_action": null,
+      "next_action": "Design HTML/CSS frontend",
+      "created_at": 1789578435.9531674,
+      "updated_at": 1789578435.9531674
     }
   }
 }

@@ -1230,8 +1230,15 @@ def run_brain():
         print("=" * 60)
         from body.server import start_companion_server, launch_companion_window
         from core.watcher import default_watcher
+        from bridge import DesktopMateBridge
         start_companion_server(host=companion_config.avatar.host, port=companion_config.avatar.port)
         launch_companion_window()
+        
+        # Start DesktopMate Bridge
+        bridge = DesktopMateBridge()
+        bridge.start()
+        print("Brain: DesktopMate Bridge initialized.")
+
         if companion_config.presence.background_watcher:
             default_watcher.start()
         print(f"Brain: Companion avatar active at http://{companion_config.avatar.host}:{companion_config.avatar.port}/ | Voice active")

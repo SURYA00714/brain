@@ -79,6 +79,7 @@ class AmbientWatcher:
         return events
 
     def _watch_loop(self):
+        from core.companion_state import default_companion_state
         while self.is_running:
             try:
                 events = self.poll_once()
@@ -86,6 +87,10 @@ class AmbientWatcher:
                     # Update WorldState without LLM
                     if ev["type"] == "WINDOW_FOCUS_CHANGED":
                         default_world_state.active_app = ev.get("current_app")
+                    
+                    # Broadcast to Event Bus (which DesktopMateBridge listens to)
+                    default_companion_state.broadcast("OS_EVENT", ev)
+
                     for cb in self._event_callbacks:
                         try:
                             cb(ev)
