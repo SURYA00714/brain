@@ -9,7 +9,7 @@ import json
 import time
 import threading
 from queue import Empty
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional
 
@@ -152,9 +152,9 @@ class CompanionHTTPHandler(SimpleHTTPRequestHandler):
         pass  # Suppress noisy HTTP request logging
 
 
-def start_companion_server(host: str = "127.0.0.1", port: int = 8765) -> HTTPServer:
+def start_companion_server(host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
     """Starts companion server in background thread."""
-    server = HTTPServer((host, port), CompanionHTTPHandler)
+    server = ThreadingHTTPServer((host, port), CompanionHTTPHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     return server

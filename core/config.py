@@ -18,6 +18,7 @@ FALLBACK_CONFIG: Dict[str, Any] = {
         "scale": 1.0,
         "theme": "dark_glass",
         "mouse_tracking": True,
+        "host": "127.0.0.1",
         "port": 8765
     },
     "voice": {
@@ -28,7 +29,8 @@ FALLBACK_CONFIG: Dict[str, Any] = {
     },
     "presence": {
         "enabled": True,
-        "poll_interval_sec": 3.0
+        "poll_interval_sec": 3.0,
+        "background_watcher": True
     },
     "debug": {
         "enabled": False
@@ -80,6 +82,8 @@ class CompanionConfig:
                 self.__dict__.update(data)
             def get(self, k, default=None):
                 return getattr(self, k, default)
+            def __getattr__(self, name):
+                return None
         return SectionView(self._data.get("avatar", {}))
 
     @property
@@ -89,6 +93,8 @@ class CompanionConfig:
                 self.__dict__.update(data)
             def get(self, k, default=None):
                 return getattr(self, k, default)
+            def __getattr__(self, name):
+                return None
         return SectionView(self._data.get("voice", {}))
 
     @property
@@ -98,6 +104,8 @@ class CompanionConfig:
                 self.__dict__.update(data)
             def get(self, k, default=None):
                 return getattr(self, k, default)
+            def __getattr__(self, name):
+                return None
         return SectionView(self._data.get("presence", {}))
 
 

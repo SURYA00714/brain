@@ -172,7 +172,8 @@ function connectSSE() {
 
     eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const payload = JSON.parse(event.data);
+        const data = payload.data ? payload.data : payload; // Support nested or flat payload
         applyState(data);
       } catch (err) {
         console.error('SSE parse error:', err);
