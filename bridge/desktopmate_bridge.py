@@ -48,6 +48,7 @@ class DesktopMateBridge:
         self._event_thread: Optional[threading.Thread] = None
         self.connected = False
         self.capabilities = CapabilityRegistry()
+        self._running = True
 
         # Pending response futures keyed by request_id
         self._pending: Dict[str, asyncio.Future] = {}
@@ -63,6 +64,7 @@ class DesktopMateBridge:
             logger.error("websockets module not installed. Bridge disabled.")
             return
 
+        self._running = True
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="BridgeWS")
         self._thread.start()
@@ -72,13 +74,25 @@ class DesktopMateBridge:
         )
         self._event_thread.start()
 
+    def stop(self):
+        """Stop the background WS connection and threads."""
+        self._running = False
+        self.connected = False
+        if self.ws and self._loop and self._loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(self.ws.close(), self._loop)
+            except Exception:
+                pass
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+
     def _run_loop(self):
         asyncio.set_event_loop(self._loop)
         self._loop.run_until_complete(self._connect_forever())
 
     async def _connect_forever(self):
         """Reconnect loop — retries every 5s on failure."""
-        while True:
+        while self._running:
             try:
                 async with websockets.connect(
                     self.uri,
@@ -87,16 +101,19 @@ class DesktopMateBridge:
                 ) as ws:
                     self.ws = ws
                     self.connected = True
-                    logger.info(f"Connected to Desktop Mate at {self.uri}")
+                    # Start listening first so responses can be received
+                    listen_task = asyncio.create_task(self._listen(ws))
                     # Discover capabilities on connect
                     await self._discover_capabilities()
-                    await self._listen(ws)
+                    await listen_task
             except Exception as e:
                 self.connected = False
                 self.ws = None
                 self.capabilities.clear()
                 # Cancel any pending futures
                 self._cancel_all_pending(f"Disconnected: {e}")
+                if not self._running:
+                    break
                 logger.debug(f"Bridge connection failed: {e}. Retrying in 5s...")
                 await asyncio.sleep(5)
 
@@ -160,7 +177,7 @@ class DesktopMateBridge:
             logger.error("Outgoing message exceeds size limit")
             return None
 
-        loop = asyncio.get_event_loop()
+        loop = self._loop or asyncio.get_running_loop()
         fut = loop.create_future()
         with self._pending_lock:
             self._pending[req_id] = fut
@@ -177,6 +194,19 @@ class DesktopMateBridge:
             with self._pending_lock:
                 self._pending.pop(req_id, None)
             logger.error(f"Send error: {e}")
+            return None
+
+    def send_and_wait(self, action: str, arguments: Optional[Dict[str, Any]] = None,
+                      timeout: float = 3.0) -> Optional[Dict[str, Any]]:
+        """Synchronously send a request and wait for the response from Desktop Mate."""
+        if not self.connected or not self.ws or not self._loop:
+            return None
+        coro = self._send_and_wait_async(action, arguments or {}, timeout=timeout)
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout=timeout + 0.5)
+        except Exception as e:
+            logger.debug(f"send_and_wait failed for {action}: {e}")
             return None
 
     def _send_fire_and_forget(self, action: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,10 +256,50 @@ class DesktopMateBridge:
                 "runtime_ready": False,
                 "character_ready": False,
             }
-        # Fire-and-forget health for now — full verified health requires send_and_wait
         result = self._send_fire_and_forget("health", {})
         result["bridge_connected"] = True
         return result
+
+    def health_check(self, timeout: float = 3.0) -> Dict[str, Any]:
+        """Synchronous verified health check against the live runtime."""
+        if not self.connected:
+            return {
+                "success": False,
+                "status": ActionStatus.NOT_CONNECTED.value,
+                "bridge_connected": False,
+                "runtime_ready": False,
+                "character_ready": False,
+            }
+        resp = self.send_and_wait("health", {}, timeout=timeout)
+        if resp and resp.get("success"):
+            data = resp.get("data", {})
+            return {
+                "success": True,
+                "status": resp.get("status", ActionStatus.SUCCESS.value),
+                "bridge_connected": True,
+                "runtime_ready": data.get("runtime_ready", False),
+                "character_ready": data.get("character_ready", False),
+                "details": data.get("details", ""),
+            }
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "bridge_connected": True,
+            "runtime_ready": False,
+            "character_ready": False,
+        }
+
+    def refresh_capabilities(self, timeout: float = 3.0) -> Dict[str, Any]:
+        """Ask Desktop Mate runtime for updated capabilities."""
+        if not self.connected or not self._loop:
+            return self.get_capabilities()
+        coro = self._discover_capabilities()
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            future.result(timeout=timeout + 0.5)
+        except Exception as e:
+            logger.debug(f"refresh_capabilities failed: {e}")
+        return self.get_capabilities()
 
     def get_capabilities(self) -> Dict[str, Any]:
         """Return discovered capabilities."""
@@ -239,10 +309,10 @@ class DesktopMateBridge:
             "bridge_connected": self.connected,
         }
 
-    def set_emotion(self, emotion: str) -> Dict[str, Any]:
+    def set_emotion(self, emotion: str, timeout: float = 3.0) -> Dict[str, Any]:
         """
         Set character facial expression using VRM 1.0 presets.
-        Returns honest status — never fakes success.
+        Returns honest status — returns 'verified' with data when runtime confirms weight applied.
         """
         if emotion not in BRAIN_USABLE_EXPRESSIONS:
             return {
@@ -256,7 +326,28 @@ class DesktopMateBridge:
             return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
                     "error": "Bridge not connected"}
 
-        return self._send_fire_and_forget("set_emotion", {"emotion": emotion})
+        resp = self.send_and_wait("set_emotion", {"emotion": emotion}, timeout=timeout)
+        if resp:
+            if resp.get("success"):
+                return {
+                    "success": True,
+                    "status": resp.get("status", "verified"),
+                    "data": resp.get("data", {})
+                }
+            else:
+                err_obj = resp.get("error") or {}
+                err_msg = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                return {
+                    "success": False,
+                    "status": resp.get("status", "failed"),
+                    "error": err_msg or "Failed to set emotion in runtime"
+                }
+
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "error": "No response confirmation from Desktop Mate runtime"
+        }
 
     def play_animation(self, name: str) -> Dict[str, Any]:
         """
