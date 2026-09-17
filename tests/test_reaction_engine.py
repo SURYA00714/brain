@@ -8,6 +8,7 @@ class MockBridge:
         self.emotion_calls = []
         self.animation_calls = []
         self.voice_calls = []
+        self.look_at_calls = []
 
     def set_emotion(self, emotion):
         self.emotion_calls.append(emotion)
@@ -19,6 +20,10 @@ class MockBridge:
         
     def play_voice(self, file):
         self.voice_calls.append(file)
+        return {"success": True, "status": "executed_unverified"}
+
+    def look_at_target(self, target):
+        self.look_at_calls.append(target)
         return {"success": True, "status": "executed_unverified"}
 
 class TestReactionEngine(unittest.TestCase):

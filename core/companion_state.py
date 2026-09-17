@@ -53,7 +53,77 @@ class CompanionState:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["state"] = self.activity  # Backwards compatibility with avatar UI
+        try:
+            from bridge.companion_mode import default_companion_mode
+            d["companion_mode"] = default_companion_mode.get_mode()
+        except Exception:
+            d["companion_mode"] = "ACTIVE"
         return d
+
+
+class InterruptionController:
+    """
+    Stage 6G — Controlled User Interruption Manager.
+    Allows safe cancellation of ongoing thinking, searching, working, or speaking actions.
+    - Flushes speech queue immediately.
+    - Signals task cancellation token.
+    - Restores companion to IDLE/LISTENING state safely.
+    - Never terminates unrelated user applications or process trees.
+    """
+    def __init__(self, state_manager=None, voice_mgr=None):
+        self.state_manager = state_manager
+        self.voice_mgr = voice_mgr
+        self._cancellation_requested = threading.Event()
+
+    def request_interruption(self, reason: str = "user_request") -> Dict[str, Any]:
+        """Triggers immediate user interruption."""
+        self._cancellation_requested.set()
+
+        # 1. Stop active speech immediately
+        if self.voice_mgr:
+            try:
+                self.voice_mgr.interrupt()
+            except Exception:
+                pass
+        else:
+            try:
+                from core.voice import default_voice
+                default_voice.interrupt()
+            except Exception:
+                pass
+
+        # 2. Reset CompanionState to IDLE
+        if self.state_manager:
+            self.state_manager.set_state(
+                activity=CompanionActivity.IDLE,
+                status_text=f"Interrupted ({reason})",
+                speaking=False,
+                listening=True,
+                verification="INTERRUPTED"
+            )
+
+        # 3. Update WorldState
+        try:
+            from core.world_state import default_world_state
+            default_world_state.set_brain_activity("IDLE")
+            default_world_state.set_companion_activity("IDLE")
+        except Exception:
+            pass
+
+        return {
+            "interrupted": True,
+            "reason": reason,
+            "timestamp": time.time()
+        }
+
+    def is_cancelled(self) -> bool:
+        return self._cancellation_requested.is_set()
+
+    def reset(self) -> None:
+        self._cancellation_requested.clear()
+
+
+default_interruption_controller = InterruptionController()
 
 
 class CompanionStateManager:
@@ -64,6 +134,8 @@ class CompanionStateManager:
         self._lock = threading.Lock()
         self._subscribers: List[Queue] = []
         self._sub_lock = threading.Lock()
+        self.interruption = default_interruption_controller
+        self.interruption.state_manager = self
 
     def get_state(self) -> Dict[str, Any]:
         with self._lock:
@@ -87,7 +159,16 @@ class CompanionStateManager:
         """Updates the unified companion state and broadcasts an SSE event."""
         with self._lock:
             if activity:
-                self._state.activity = activity.upper()
+                act_upper = activity.upper()
+                self._state.activity = act_upper
+                # Sync with WorldState
+                try:
+                    from core.world_state import default_world_state
+                    default_world_state.set_brain_activity(act_upper)
+                    default_world_state.set_companion_activity(act_upper)
+                except Exception:
+                    pass
+
             if status_text:
                 self._state.status_text = status_text
             elif activity:
@@ -101,10 +182,20 @@ class CompanionStateManager:
                 self._state.listening = listening
             if goal is not None:
                 self._state.current_goal = goal
+                try:
+                    from core.world_state import default_world_state
+                    default_world_state.set_current_goal(goal)
+                except Exception:
+                    pass
             if app is not None:
                 self._state.current_application = app
             if task is not None:
                 self._state.current_task = task
+                try:
+                    from core.world_state import default_world_state
+                    default_world_state.set_active_task(task)
+                except Exception:
+                    pass
             if progress is not None:
                 self._state.progress = max(0.0, min(1.0, progress))
             if action is not None:
@@ -153,3 +244,4 @@ class CompanionStateManager:
 
 
 default_companion_state = CompanionStateManager()
+

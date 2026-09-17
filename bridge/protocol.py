@@ -31,6 +31,9 @@ class ActionStatus(str, Enum):
     NOT_CONNECTED = "not_connected"         # Bridge WS not connected
     NOT_IMPLEMENTED = "not_implemented"     # Stub — no runtime adapter yet
     BLOCKED_BY_ENVIRONMENT = "blocked_by_environment"  # e.g. Wine/Linux limitation
+    BLOCKED = "blocked"                     # Action blocked by safety/validation policy
+    INVALID = "invalid"                     # Malformed payload / invalid parameters
+    RUNTIME_UNAVAILABLE = "runtime_unavailable"  # Unity runtime instance missing or uninitialized
 
 
 class CapabilityStatus(str, Enum):
@@ -79,6 +82,11 @@ KNOWN_ACTIONS = {
     "play_animation",
     "look_at",
     "play_voice",
+    "speak",
+    "stop_speaking",
+    "return_idle",
+    "trim_memory",
+    "set_fps",
     "get_character_state",
 }
 
@@ -90,8 +98,26 @@ ACTION_PARAMS: Dict[str, List[str]] = {
     "play_animation": ["name"],
     "look_at": ["target"],
     "play_voice": ["file"],
+    "speak": ["text"],
+    "stop_speaking": [],
+    "return_idle": [],
+    "trim_memory": [],
+    "set_fps": ["fps"],
     "get_character_state": [],
 }
+
+
+def make_companion_action(action: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Build a standardized companion action payload.
+    Schema: {"type": "companion_action", "action": action, "arguments": arguments}
+    """
+    return {
+        "type": "companion_action",
+        "action": action.upper() if isinstance(action, str) else "",
+        "arguments": arguments or {}
+    }
+
 
 
 # ---------------------------------------------------------------------------

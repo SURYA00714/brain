@@ -91,7 +91,7 @@ class MemoryPolicy:
                 return "IGNORE", "Security Policy Violation: Memory contains forbidden command execution syntax.", None
 
         # Ephemeral / Temporary context detection
-        temporary_keywords = ["temporary", "just for now", "for now", "for this step", "current query", "for this session"]
+        temporary_keywords = ["temporary", "just for now", "for now", "for this step", "current query", "for this session", "search "]
         if any(kw in combined_text.lower() for kw in temporary_keywords):
             return "TEMPORARY", "Memory marked as temporary context.", None
 
@@ -104,6 +104,40 @@ class MemoryPolicy:
             updated_at=time.time()
         )
         return "REMEMBER", None, record
+
+    @classmethod
+    def classify_memory_intent(cls, text: str) -> str:
+        """
+        Classifies input text into Stage 7M memory policy categories:
+        EPHEMERAL | TASK_CONTEXT | POTENTIAL_MEMORY | SENSITIVE | IGNORE
+        """
+        if not text or not isinstance(text, str):
+            return "IGNORE"
+
+        lowered = text.lower().strip()
+
+        # Check sensitive
+        sensitive_keywords = ["password", "passwd", "secret", "api_key", "apikey", "credential", "token"]
+        if any(kw in lowered for kw in sensitive_keywords):
+            return "SENSITIVE"
+
+        for pattern in SENSITIVE_PATTERNS:
+            if re.search(pattern, lowered, flags=re.IGNORECASE):
+                return "SENSITIVE"
+
+        # Check ephemeral requests
+        ephemeral_patterns = [r"^search\b", r"^open\b", r"^close\b", r"^focus\b", r"^click\b", r"^type\b"]
+        if any(re.search(p, lowered) for p in ephemeral_patterns):
+            return "EPHEMERAL"
+
+        # Check potential persistent memory / project facts
+        memory_triggers = ["uses ", "located at ", "path is ", "prefer ", "my name is ", "remember ", "always "]
+        if any(trig in lowered for trig in memory_triggers):
+            return "POTENTIAL_MEMORY"
+
+def classify_memory_intent(text: str) -> str:
+    """Stage 7M memory policy classification helper."""
+    return MemoryPolicy.classify_memory_intent(text)
 
 
 class MemoryStore:

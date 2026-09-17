@@ -149,6 +149,9 @@ function applyState(data) {
     statusText.textContent = data.status_text;
   }
 
+  // Update status panel fields
+  updateStatusPanel(data);
+
   // Voice synthesis through Web Speech API if requested and enabled
   if (data.speak_text && voiceEnabled && window.speechSynthesis) {
     try {
@@ -163,6 +166,50 @@ function applyState(data) {
       console.warn('Speech synthesis error:', err);
     }
   }
+}
+
+// Update companion status panel
+function updateStatusPanel(data) {
+  const set = (id, value, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = value || '—';
+    el.className = 'status-value' + (cls ? ' ' + cls : '');
+  };
+
+  // Desktop Mate status
+  const dmStatus = data.desktop_mate_status;
+  if (dmStatus) {
+    const dmCls = dmStatus === 'AVAILABLE' ? 'ok' : (dmStatus === 'DISCONNECTED' ? 'warn' : 'err');
+    set('dmStatus', dmStatus, dmCls);
+  }
+
+  // Bridge: infer from desktop_mate_status or bridge field
+  const bridgeConnected = data.bridge_connected;
+  if (bridgeConnected !== undefined) {
+    set('bridgeStatus', bridgeConnected ? 'CONNECTED' : 'DISCONNECTED', bridgeConnected ? 'ok' : 'warn');
+  } else if (dmStatus) {
+    set('bridgeStatus', dmStatus === 'AVAILABLE' ? 'CONNECTED' : 'DISCONNECTED',
+        dmStatus === 'AVAILABLE' ? 'ok' : 'warn');
+  }
+
+  // Companion mode
+  if (data.companion_mode) set('modeStatus', data.companion_mode, null);
+
+  // Voice status
+  const voiceStatus = data.voice_status;
+  if (voiceStatus) {
+    const vCls = voiceStatus === 'AVAILABLE' ? 'ok' : (data.speaking ? 'ok' : null);
+    set('voiceStatus', data.speaking ? 'SPEAKING' : voiceStatus, vCls);
+  }
+
+  // Active application
+  const app = data.current_application || data.active_application || data.focused_app;
+  if (app) set('appStatus', app, null);
+
+  // Current task
+  const task = data.current_task || data.active_task;
+  if (task) set('taskStatus', task.length > 24 ? task.substring(0, 24) + '…' : task, null);
 }
 
 // Real-time EventSource connection (SSE)

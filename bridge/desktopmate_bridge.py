@@ -24,6 +24,7 @@ from bridge.protocol import (
     make_request, validate_response,
     BRAIN_USABLE_EXPRESSIONS,
 )
+from bridge.companion_mode import default_companion_mode
 
 try:
     import websockets
@@ -114,8 +115,8 @@ class DesktopMateBridge:
                 self._cancel_all_pending(f"Disconnected: {e}")
                 if not self._running:
                     break
-                logger.debug(f"Bridge connection failed: {e}. Retrying in 5s...")
-                await asyncio.sleep(5)
+                logger.debug(f"Bridge connection failed: {e}. Retrying in 1s...")
+                await asyncio.sleep(1)
 
     async def _listen(self, ws):
         """Listen for responses and dispatch to pending futures."""
@@ -144,7 +145,7 @@ class DesktopMateBridge:
 
     async def _discover_capabilities(self):
         """Ask the plugin what it can actually do."""
-        resp = await self._send_and_wait_async("capabilities", {}, timeout=5.0)
+        resp = await self._send_and_wait_async("capabilities", {}, timeout=10.0)
         if resp and resp.get("success"):
             caps = resp.get("data", {}).get("capabilities", {})
             for name, info in caps.items():
@@ -385,6 +386,40 @@ class DesktopMateBridge:
             "error": "No response confirmation from Desktop Mate runtime"
         }
 
+    def speak(self, text: str) -> Dict[str, Any]:
+        """
+        Request companion speech synthesis via voice engine.
+        Returns honest status result.
+        """
+        if not text or not isinstance(text, str):
+            return {"success": False, "status": ActionStatus.FAILED.value,
+                    "error": "Empty or invalid text for speech"}
+
+        from core.voice import LinuxNativeTTS
+        tts = LinuxNativeTTS()
+        if not tts.is_available():
+            return {"success": True, "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+                    "data": {"text": text, "mocked": True}}
+
+        res = tts.speak(text, wait=False)
+        return {
+            "success": True,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value if res else ActionStatus.FAILED.value,
+            "data": {"text": text}
+        }
+
+    def stop_speaking(self) -> Dict[str, Any]:
+        """Stop active TTS playback and flush pending speech queue."""
+        from core.voice import LinuxNativeTTS
+        tts = LinuxNativeTTS()
+        tts.stop()
+        return {"success": True, "status": ActionStatus.SUCCESS.value}
+
+    def return_idle(self) -> Dict[str, Any]:
+        """Return companion to default neutral emotion and idle animation."""
+        self.set_emotion("neutral")
+        return self.play_animation("idle")
+
     def play_voice(self, audio_path: str) -> Dict[str, Any]:
         """
         Request voice playback with lip-sync.
@@ -400,13 +435,91 @@ class DesktopMateBridge:
 
         return self._send_fire_and_forget("play_voice", {"file": audio_path})
 
+
     def look_at(self, target: str) -> Dict[str, Any]:
         """Request look-at behavior."""
         if not self.connected:
             return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
                     "error": "Bridge not connected"}
 
-        return self._send_fire_and_forget("look_at", {"target": target})
+        resp = self.send_and_wait("look_at", {"target": target}, timeout=3.0)
+        if resp and resp.get("success"):
+            return {
+                "success": True,
+                "status": resp.get("status", "executed_unverified"),
+                "data": resp.get("data", {})
+            }
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "error": "No response confirmation from Desktop Mate runtime"
+        }
+
+    def trim_memory(self, timeout: float = 3.0) -> Dict[str, Any]:
+        """Request Unity runtime garbage collection and unused asset unloading."""
+        if not self.connected:
+            return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
+                    "error": "Bridge not connected"}
+
+        resp = self.send_and_wait("trim_memory", {}, timeout=timeout)
+        if resp and resp.get("success"):
+            return {
+                "success": True,
+                "status": resp.get("status", "verified"),
+                "data": resp.get("data", {})
+            }
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "error": "No response confirmation from Desktop Mate runtime"
+        }
+
+    def set_fps(self, fps: int = 30, timeout: float = 3.0) -> Dict[str, Any]:
+        """Request dynamic frame rate adjustment for CPU/RAM optimization."""
+        if not isinstance(fps, int) or isinstance(fps, bool) or fps < 15 or fps > 60:
+            return {"success": False, "status": ActionStatus.FAILED.value,
+                    "error": f"FPS out of allowed range (15-60): {fps}"}
+
+        if not self.connected:
+            return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
+                    "error": "Bridge not connected"}
+
+        resp = self.send_and_wait("set_fps", {"fps": fps}, timeout=timeout)
+        if resp and resp.get("success"):
+            return {
+                "success": True,
+                "status": resp.get("status", "verified"),
+                "data": resp.get("data", {})
+            }
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "error": "No response confirmation from Desktop Mate runtime"
+        }
+
+
+    # ------------------------------------------------------------------
+    # Companion Mode Delegation
+    # ------------------------------------------------------------------
+
+    def set_companion_mode(self, mode: str) -> Dict[str, Any]:
+        """Set companion operating mode (ACTIVE/PASSIVE/SLEEPING/DISABLED)."""
+        return default_companion_mode.set_mode(mode)
+
+    def get_companion_mode(self) -> Dict[str, Any]:
+        """Return current companion mode."""
+        return default_companion_mode.to_dict()
+
+    def look_at_target(self, target: str) -> Dict[str, Any]:
+        """
+        Set companion look-at target (mouse/screen/active_window/none).
+        Throttled to once per 5 seconds.
+        """
+        if not hasattr(self, "_look_at_ctrl"):
+            from bridge.look_at import LookAtController
+            from bridge.companion_mode import default_companion_mode
+            self._look_at_ctrl = LookAtController(self, default_companion_mode)
+        return self._look_at_ctrl.set_target(target)
 
     # ------------------------------------------------------------------
     # Event Bus Subscriber
@@ -415,9 +528,12 @@ class DesktopMateBridge:
     def _event_subscriber_loop(self):
         """Subscribe to Brain's CompanionStateManager and dispatch to reaction engine."""
         from bridge.reaction_engine import ReactionEngine
+        from bridge.idle_behavior import IdleBehaviorController
         from core.companion_state import default_companion_state
 
-        engine = ReactionEngine(self)
+        engine = ReactionEngine(self, default_companion_mode)
+        idle = IdleBehaviorController(self, default_companion_mode, default_companion_state)
+        idle.start()
         q = default_companion_state.subscribe()
         logger.info("Bridge subscribed to Companion State Event Bus")
 

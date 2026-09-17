@@ -1,0 +1,66 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/jai/Downloads/Brain/scratch/inspect_tool/inspect_tool.csproj": {}
+  },
+  "projects": {
+    "/home/jai/Downloads/Brain/scratch/inspect_tool/inspect_tool.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/jai/Downloads/Brain/scratch/inspect_tool/inspect_tool.csproj",
+        "projectName": "inspect_tool",
+        "projectPath": "/home/jai/Downloads/Brain/scratch/inspect_tool/inspect_tool.csproj",
+        "packagesPath": "/home/jai/.nuget/packages/",
+        "outputPath": "/home/jai/Downloads/Brain/scratch/inspect_tool/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/jai/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/home/jai/.dotnet/sdk/8.0.425/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

@@ -10,20 +10,25 @@ class TestDesktopPresenceManager(unittest.TestCase):
 
     @patch("subprocess.run")
     def test_is_process_running_true(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="51721\n")
+        mock_run.return_value = MagicMock(returncode=0, stdout="123 S DesktopMate.exe Z:\\DesktopMate.exe\n")
         mgr = DesktopPresenceManager()
         self.assertTrue(mgr.is_process_running())
-        mock_run.assert_called_once_with(["pgrep", "-f", "DesktopMate.exe"], capture_output=True, text=True, timeout=3)
 
     @patch("subprocess.run")
     def test_is_process_running_false(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="")
         mgr = DesktopPresenceManager()
         self.assertFalse(mgr.is_process_running())
 
     @patch("subprocess.run")
     def test_get_window_id_found(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="0x8200005 DesktopMate (steam_app_3301060)\n")
+        mock_tree = MagicMock(returncode=0, stdout='0x8200005 "DesktopMate"\n', stderr="")
+        mock_id = MagicMock(returncode=0, stdout='xwininfo: Window id: 0x8200005 "DesktopMate"', stderr="")
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="123 S DesktopMate.exe Z:\\DesktopMate.exe\n"),
+            mock_tree,
+            mock_id,
+        ]
         mgr = DesktopPresenceManager()
         win_id = mgr.get_window_id()
         self.assertEqual(win_id, "0x8200005")

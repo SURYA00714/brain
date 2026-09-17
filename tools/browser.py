@@ -18,6 +18,30 @@ class BaseBrowserProvider:
         raise NotImplementedError()
 
 
+def sanitize_untrusted_web_data(text: str) -> str:
+    """
+    Stage 8X — Prompt Injection Shield & Untrusted Data Boundary.
+    Strips systemic prompt injection triggers from external web text and tags data as untrusted.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+
+    import re
+    injection_patterns = [
+        r"(?i)ignore\s+(all\s+)?(previous\s+)?(safety\s+)?rules",
+        r"(?i)system\s+prompt\s+override",
+        r"(?i)open\s+terminal\s+and\s+run",
+        r"(?i)execute\s+shell\s+command",
+        r"(?i)sudo\s+rm\s+-rf"
+    ]
+
+    cleaned = text
+    for pat in injection_patterns:
+        cleaned = re.sub(pat, "[FILTERED_UNTRUSTED_CONTENT]", cleaned)
+
+    return f"[UNTRUSTED_WEBPAGE_DATA]\n{cleaned.strip()}\n[/UNTRUSTED_WEBPAGE_DATA]"
+
+
 class StructuredBrowserProvider(BaseBrowserProvider):
     """
     Structured Browser Provider.

@@ -100,6 +100,11 @@ class LinuxNativeTTS(BaseVoiceProvider):
     Ultra-lightweight Linux-native speech synthesis.
     Leverages spd-say (Speech Dispatcher) or espeak-ng with zero GPU/RAM overhead.
     """
+class LinuxNativeTTS(BaseVoiceProvider):
+    """
+    Ultra-lightweight Linux-native speech synthesis.
+    Leverages spd-say (Speech Dispatcher) or espeak-ng with zero GPU/RAM overhead.
+    """
     def __init__(self):
         self.engine = None
         if shutil.which("spd-say"):
@@ -107,8 +112,25 @@ class LinuxNativeTTS(BaseVoiceProvider):
         elif shutil.which("espeak-ng"):
             self.engine = "espeak-ng"
 
+        self._active_proc: Optional[subprocess.Popen] = None
+        self._proc_lock = threading.Lock()
+
     def is_available(self) -> bool:
         return self.engine is not None and os.environ.get("BRAIN_MOCK_GUI") != "1"
+
+    def stop(self):
+        """Cancel and terminate any currently playing TTS process."""
+        with self._proc_lock:
+            if self._active_proc:
+                try:
+                    self._active_proc.terminate()
+                    self._active_proc.wait(timeout=0.5)
+                except Exception:
+                    try:
+                        self._active_proc.kill()
+                    except Exception:
+                        pass
+                self._active_proc = None
 
     def speak(self, text: str, wait: bool = False) -> bool:
         if not text or not isinstance(text, str):
@@ -122,29 +144,46 @@ class LinuxNativeTTS(BaseVoiceProvider):
             return False
 
         def _run():
+            wav_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scratch", "tts.wav"))
             try:
-                wav_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scratch", "tts.wav"))
                 os.makedirs(os.path.dirname(wav_path), exist_ok=True)
                 
                 if self.engine == "spd-say":
-                    # spd-say doesn't easily output wav by default, fallback to playing
-                    subprocess.run(["spd-say", "-r", "10", "-p", "5", clean_text], timeout=15)
+                    with self._proc_lock:
+                        self._active_proc = subprocess.Popen(["spd-say", "-r", "10", "-p", "5", clean_text])
+                    self._active_proc.wait(timeout=15)
                 elif self.engine == "espeak-ng":
                     # Save to WAV first
-                    subprocess.run(["espeak-ng", "-s", "175", "-p", "50", "-w", wav_path, clean_text], timeout=15)
+                    with self._proc_lock:
+                        self._active_proc = subprocess.Popen(["espeak-ng", "-s", "175", "-p", "50", "-w", wav_path, clean_text])
+                    self._active_proc.wait(timeout=15)
+                    
                     # Notify Desktop Mate Bridge via Event Bus
                     from core.companion_state import default_companion_state
                     default_companion_state.broadcast("OS_EVENT", {"type": "VOICE_READY", "file": wav_path})
+
                     # Play locally as fallback/sync
-                    subprocess.run(["aplay", wav_path], timeout=15)
+                    with self._proc_lock:
+                        self._active_proc = subprocess.Popen(["aplay", wav_path])
+                    self._active_proc.wait(timeout=15)
             except Exception:
                 pass
+            finally:
+                with self._proc_lock:
+                    self._active_proc = None
+                # Clean up temporary audio file to prevent storage buildup
+                if os.path.isfile(wav_path):
+                    try:
+                        os.remove(wav_path)
+                    except Exception:
+                        pass
 
         if wait:
             _run()
         else:
             threading.Thread(target=_run, daemon=True).start()
         return True
+
 
 
 class SpeechQueue:
@@ -169,6 +208,11 @@ class SpeechQueue:
     def interrupt(self):
         """Interrupt and flush all remaining speech in the queue."""
         self._stop_requested.set()
+        if hasattr(self.provider, "stop"):
+            try:
+                self.provider.stop()
+            except Exception:
+                pass
         with self._lock:
             while not self._queue.empty():
                 try:
@@ -176,8 +220,10 @@ class SpeechQueue:
                     self._queue.task_done()
                 except Exception:
                     break
+        self._is_speaking = False
         time.sleep(0.05)
         self._stop_requested.clear()
+
 
     @property
     def is_speaking(self) -> bool:
@@ -302,4 +348,27 @@ class VoiceManager:
         self.is_muted = False
 
 
+class SpeechInputProvider:
+    """
+    Stage 6L — Speech Input Provider Abstraction for future voice input integration.
+    States: AVAILABLE, UNAVAILABLE, ERROR.
+    Zero fake speech recognition, zero unauthorized background microphone recording.
+    """
+    def __init__(self):
+        self.status = "UNAVAILABLE"
+
+    def is_available(self) -> bool:
+        return self.status == "AVAILABLE"
+
+    def listen(self, duration_seconds: float = 5.0) -> Dict[str, Any]:
+        return {
+            "success": False,
+            "status": self.status,
+            "text": "",
+            "error": "No safe lightweight speech-input backend loaded. Speech input is UNAVAILABLE."
+        }
+
+
+default_speech_input = SpeechInputProvider()
 default_voice = VoiceManager()
+

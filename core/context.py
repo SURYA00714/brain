@@ -139,7 +139,24 @@ class ShortTermMemory:
             if last_q:
                 return f"search the web for {last_q}"
 
+        # 6. Stage 6H Task Continuity keywords: "continue", "try again", "what happened?", "stop"
+        if lowered in ["continue", "resume", "keep going"]:
+            last_app = self.get_last_app()
+            last_q = self.get_last_query()
+            if last_q:
+                return f"continue search for {last_q}"
+            elif last_app:
+                return f"focus {last_app}"
+        elif lowered in ["try again", "retry"]:
+            if self.turns:
+                return self.turns[-1].user_text
+        elif lowered in ["stop", "cancel"]:
+            from core.companion_state import default_interruption_controller
+            default_interruption_controller.request_interruption("user_stop_command")
+            return "stop current action"
+
         return user_text
+
 
     def get_context_snippet(self) -> str:
         """Formats the short-term dialogue window for inclusion in cognitive prompt."""

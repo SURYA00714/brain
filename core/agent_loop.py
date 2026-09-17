@@ -39,11 +39,25 @@ class AgentLoop:
         t0 = time.time()
         telemetry = default_telemetry.start_request(user_request)
 
+        # Update Session & Generation token
+        from core.session import default_session_manager
+        from core.event_bus import default_event_bus
+        from core.resource_governor import default_resource_governor
+        from core.autonomy import default_proactive_awareness, default_autonomy_controller
+
+
+        gen_id = default_session_manager.bump_generation()
+        default_session_manager.update_session(user_input=user_request, task=user_request)
+        default_event_bus.publish("USER_MESSAGE", {"request": user_request, "generation_id": gen_id})
+        default_resource_governor.check_and_govern()
+        default_proactive_awareness.inspect_environment()
+
         # 1. UNDERSTAND & IMMEDIATE SAFETY CHECK
         is_safe, safety_err = screen_prompt_safety(user_request)
         if not is_safe:
             telemetry.total_ms = (time.time() - t0) * 1000.0
             default_telemetry.finish_request()
+            default_event_bus.publish("SAFETY_BLOCK", {"request": user_request, "error": safety_err})
             return {
                 "success": False,
                 "status": "BLOCKED",
@@ -83,6 +97,7 @@ class AgentLoop:
                 telemetry.total_ms = (time.time() - t0) * 1000.0
                 telemetry.deterministic_success = True
                 default_telemetry.finish_request()
+                default_event_bus.publish("TASK_COMPLETED", {"route": "fast_route", "answer": fast_route.get("answer")})
                 return {
                     "success": True,
                     "status": "COMPLETED",
@@ -123,8 +138,19 @@ class AgentLoop:
         step_idx = 0
         collected_evidence = []
         last_tool_res = None
+        default_autonomy_controller.start_autonomy(user_request)
 
         while not plan.is_complete() and step_idx < len(plan.steps) and step_idx < self.max_steps_per_turn:
+            can_cont, stop_reason = default_autonomy_controller.can_continue()
+            if not can_cont:
+                plan.status = "PAUSED"
+                return {
+                    "success": False,
+                    "status": "PAUSED",
+                    "answer": f"Autonomy controller paused execution: {stop_reason}",
+                    "evidence": collected_evidence
+                }
+
             step = plan.steps[step_idx]
             step_idx += 1
             plan.current_step_idx = step_idx - 1
@@ -142,11 +168,25 @@ class AgentLoop:
                 plan.status = "FAILED"
                 step.status = "FAILED"
                 step.error = tool_safety_err
+                default_event_bus.publish("SAFETY_BLOCK", {"tool": tool_name, "error": tool_safety_err})
                 return {
                     "success": False,
                     "status": "BLOCKED",
                     "answer": f"Brain Safety Block: {tool_safety_err}",
                     "evidence": collected_evidence
+                }
+
+            # Confirmation Manager Check (Stage 7J)
+            from core.confirmation import default_confirmation_manager
+            conf_status, conf_req = default_confirmation_manager.evaluate_action(tool_name, args)
+            if conf_status == "REQUIRED" and conf_req:
+                plan.status = "PAUSED"
+                return {
+                    "success": False,
+                    "status": "CONFIRMATION_REQUIRED",
+                    "answer": f"Action '{tool_name}' is sensitive and requires explicit user confirmation (Request ID: {conf_req.request_id}).",
+                    "evidence": collected_evidence,
+                    "confirmation_request": conf_req.to_dict()
                 }
 
             # Tool Execution with Registered Registry
@@ -160,15 +200,50 @@ class AgentLoop:
                     "evidence": collected_evidence
                 }
 
+            # Stage 6G / 7E Interruption & Generation Check
+            from core.companion_state import default_interruption_controller
+            if default_interruption_controller.is_cancelled():
+                default_interruption_controller.reset()
+                plan.status = "INTERRUPTED"
+                default_autonomy_controller.cancel("user_interruption")
+                return {
+                    "success": False,
+                    "status": "INTERRUPTED",
+                    "answer": "Action interrupted by user request.",
+                    "evidence": collected_evidence
+                }
+
             if not quiet:
                 print(f"Brain: [Step {step_idx}/{len(plan.steps)}] {tool_name} with args {args}")
 
+            # Update CompanionState to WORKING
+            from core.companion_state import default_companion_state, CompanionActivity
+            default_companion_state.set_state(
+                activity=CompanionActivity.WORKING,
+                action=tool_name,
+                task=f"Executing {tool_name}"
+            )
+
             res = self.registry.execute(tool_name, args)
             last_tool_res = res
+            default_autonomy_controller.record_step(res.get("success", False))
 
-            # 7. OBSERVE & VERIFY
+            # 7. OBSERVE & VERIFY (Stage 6C & 6D Smart Observation Policy)
+            from core.perception import default_perception_router
+            from tools.screen import cleanup_screenshots
+
+            should_sub_observe = default_perception_router.policy.should_observe(
+                last_action=tool_name,
+                action_executed=res.get("success", False)
+            )
+
+            if should_sub_observe:
+                post_obs = default_perception_router.perceive(force_refresh=True, last_action_result=res)
+                cleanup_screenshots(keep_latest=True)
+            else:
+                post_obs = default_perception_router.get_last_result() or default_perception_router.perceive()
+
             verified = False
-            v_method = step.verification_method
 
             if tool_name == "OPEN_APP":
                 app_to_check = args.get("app_name", "")
@@ -184,23 +259,27 @@ class AgentLoop:
                         verified = True
                     else:
                         plan.status = "FAILED"
+                        default_companion_state.set_state(activity=CompanionActivity.ERROR, verification="FAILED")
                         return {
                             "success": False,
                             "status": "FAILED",
                             "answer": f"Action failed: {step.error}",
                             "evidence": collected_evidence
                         }
-                default_world_state.last_opened_app = app_to_check
             else:
                 verified = res.get("success", False)
 
             if verified:
                 step.status = "COMPLETED"
                 step.result = res
-                collected_evidence.append(f"{tool_name}: Success")
-                default_world_state.record_action_outcome(tool_name, args, res, verified=True)
+                obs_app = getattr(post_obs, "application", "desktop")
+                obs_state = getattr(post_obs, "screen_state", "NORMAL")
+                collected_evidence.append(f"{tool_name}: Success [Observed window: '{obs_app}', state: {obs_state}]")
+                default_world_state.record_action_outcome(tool_name, args, res, verified=True, verification_status="CONFIRMED")
+                default_companion_state.set_state(activity=CompanionActivity.SUCCESS, verification="CONFIRMED")
             else:
                 step.status = "FAILED"
+                default_companion_state.set_state(activity=CompanionActivity.ERROR, verification="FAILED")
                 if not step.allow_failure:
                     plan.status = "FAILED"
                     return {
@@ -211,6 +290,7 @@ class AgentLoop:
                     }
 
         plan.status = "COMPLETED"
+        default_autonomy_controller.complete()
         telemetry.total_ms = (time.time() - t0) * 1000.0
         default_telemetry.finish_request()
 
@@ -218,6 +298,10 @@ class AgentLoop:
         final_ans = f"Completed {len(plan.steps)} steps successfully."
         if plan.steps and plan.steps[-1].action_type == "final" and plan.steps[-1].answer:
             final_ans = plan.steps[-1].answer
+
+        from core.companion_state import default_companion_state, CompanionActivity
+        default_companion_state.set_state(activity=CompanionActivity.IDLE)
+        default_session_manager.update_session(brain_response=final_ans)
 
         return {
             "success": True,
@@ -227,5 +311,16 @@ class AgentLoop:
             "plan_steps": len(plan.steps)
         }
 
+    def _explain_failure(self, tool_name: str, arguments: Dict[str, Any], error_reason: str) -> str:
+        """Stage 7K — Structured, evidence-grounded failure explanation layer."""
+        return (
+            f"Attempted action: {tool_name} with arguments {arguments}.\n"
+            f"Result: Execution failed.\n"
+            f"Reason: {error_reason}.\n"
+            f"Verification: Could not verify expected state change.\n"
+            f"Recovery: Safe to retry or ask user for guidance."
+        )
+
 
 default_agent_loop = AgentLoop()
+

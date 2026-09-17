@@ -59,8 +59,11 @@ class TestComputerInteraction(unittest.TestCase):
     @patch("tools.screen.HAS_MSS", False)
     @patch("tools.screen.HAS_PYAUTOGUI", False)
     def test_screenshot_failure_handling(self):
-        res = capture_screen()
-        self.assertTrue(isinstance(res, str) and res.startswith("Error:"))
+        with patch.dict("os.environ", {"BRAIN_MOCK_GUI": "0"}):
+            res = capture_screen()
+            is_err_str = isinstance(res, str) and res.startswith("Error:")
+            is_err_dict = isinstance(res, dict) and not res.get("success") and "error" in res
+            self.assertTrue(is_err_str or is_err_dict)
 
     # 3. Coordinate validation tests
     def test_coordinate_validation_valid(self):

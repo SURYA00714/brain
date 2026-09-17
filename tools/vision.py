@@ -203,12 +203,13 @@ class RapidOCRVisionProvider(BaseVisionProvider):
                 elem_type = "input"
 
             is_sensitive = any(kw in lower_txt for kw in sensitive_keywords)
+            display_text = "[REDACTED]" if is_sensitive else txt
 
             elem_id = f"elem_{elem_type}_{clean_slug}_{cx}_{cy}"
             elem_obj = ScreenElement(
                 element_id=elem_id,
                 element_type=elem_type,
-                text=txt,
+                text=display_text,
                 x=x,
                 y=y,
                 width=w,

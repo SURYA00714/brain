@@ -55,13 +55,15 @@ class ToolRegistry:
 
     def execute(self, tool_name, arguments):
         """
-        Executes a registered tool with safety validation.
-        Returns structured result dict: {"success": bool, "tool": str, "data": ..., "error": ...}
+        Executes a registered tool with safety validation and action verification contract (Stage 6E/6O).
+        Returns structured result dict:
+          {"success": bool, "status": str, "tool": str, "data": ..., "error": ..., "observation_id": ...}
         """
         tool = self.get(tool_name)
         if not tool:
             return {
                 "success": False,
+                "status": "failed",
                 "tool": tool_name,
                 "data": None,
                 "error": f"Tool '{tool_name}' is not registered in the tool registry."
@@ -70,16 +72,30 @@ class ToolRegistry:
         if not isinstance(arguments, dict):
             return {
                 "success": False,
+                "status": "failed",
                 "tool": tool_name,
                 "data": None,
                 "error": f"Invalid arguments format for tool '{tool_name}'. Expected dictionary."
             }
+
+        # Stage 6O: Stale observation protection check
+        expected_obs_id = arguments.get("expected_observation_id")
+        if expected_obs_id:
+            current_obs = default_vision.get_current_observation()
+            if current_obs:
+                cur_obs_id = current_obs.get("observation_id")
+                obs_time = current_obs.get("timestamp", 0)
+                import time
+                if (cur_obs_id and cur_obs_id != expected_obs_id) or (time.time() - obs_time > 15.0):
+                    from tools.screen import analyze_captured_screen
+                    analyze_captured_screen(force_refresh=True)
 
         from tools.input import validate_gui_action_safety
         is_safe, safety_err = validate_gui_action_safety(tool.name, arguments)
         if not is_safe:
             return {
                 "success": False,
+                "status": "blocked",
                 "tool": tool.name,
                 "data": None,
                 "error": safety_err
@@ -180,22 +196,32 @@ class ToolRegistry:
             else:
                 result = tool.func(**arguments)
 
-
             # Record action in ActionChainTracker
             default_chain_tracker.record_action(tool.name, arguments, result)
 
-            # Determine success based on tool return content
-            if isinstance(result, dict) and not result.get("success", True):
+            # Determine success and status based on tool return content (Stage 6E contract)
+            if isinstance(result, dict):
+                is_success = result.get("success", True)
+                explicit_status = result.get("status")
+                if not is_success:
+                    status_str = explicit_status or "failed"
+                    err_msg = result.get("error", "Tool execution reported failure.")
+                else:
+                    status_str = explicit_status or "executed_unverified"
+                    err_msg = None
+
                 return {
-                    "success": False,
+                    "success": is_success,
+                    "status": status_str,
                     "tool": tool.name,
-                    "data": result.get("data"),
-                    "error": result.get("error", "Tool execution reported failure.")
+                    "data": result.get("data", result),
+                    "error": err_msg
                 }
 
             if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Access Denied:") or result.startswith("Safety Block:") or result.startswith("Brain Error:") or result.startswith("Memory Error:")):
                 return {
                     "success": False,
+                    "status": "failed" if not result.startswith("Safety Block:") else "blocked",
                     "tool": tool.name,
                     "data": None,
                     "error": result
@@ -203,6 +229,7 @@ class ToolRegistry:
 
             return {
                 "success": True,
+                "status": "executed_unverified",
                 "tool": tool.name,
                 "data": result,
                 "error": None
@@ -211,10 +238,12 @@ class ToolRegistry:
         except Exception as e:
             return {
                 "success": False,
+                "status": "failed",
                 "tool": tool.name,
                 "data": None,
                 "error": f"Unexpected execution error in tool '{tool.name}': {str(e)}"
             }
+
 
 
 # Default global tool registry instance
@@ -506,4 +535,253 @@ default_registry.register(Tool(
     func=dom_get_page_state
 ))
 
+# Register Stage 8F Safe Semantic Action Tools
+from tools.input import click_semantic_element, type_into_semantic_element, focus_semantic_element, select_semantic_element
 
+default_registry.register(Tool(
+    name="CLICK_ELEMENT",
+    description="Clicks a semantic UI element by role, label, text, or element_id.",
+    parameters={"role": "string", "label": "string", "text": "string", "element_id": "string"},
+    risk_level="LOW",
+    func=click_semantic_element
+))
+
+default_registry.register(Tool(
+    name="TYPE_INTO_ELEMENT",
+    description="Types text into a semantic UI element by role, label, or element_id.",
+    parameters={"text": "string", "role": "string (default: textbox)", "label": "string", "element_id": "string"},
+    risk_level="MEDIUM",
+    func=type_into_semantic_element
+))
+
+default_registry.register(Tool(
+    name="FOCUS_ELEMENT",
+    description="Focuses a target semantic UI element.",
+    parameters={"role": "string", "label": "string", "element_id": "string"},
+    risk_level="LOW",
+    func=focus_semantic_element
+))
+
+default_registry.register(Tool(
+    name="SELECT_ELEMENT",
+    description="Selects an option from a dropdown UI element.",
+    parameters={"option": "string", "role": "string (default: dropdown)", "label": "string"},
+    risk_level="LOW",
+    func=select_semantic_element
+))
+
+
+# ---------------------------------------------------------------------------
+# Companion Control Tools (registered through safety registry)
+# ---------------------------------------------------------------------------
+
+def _companion_show(*args, **kwargs):
+    """Ensure Desktop Mate window is visible and presence is applied."""
+    try:
+        from core.desktop_presence import DesktopPresenceManager
+        mgr = DesktopPresenceManager()
+        result = mgr.ensure_running()
+        if result.get("success"):
+            win_id = result.get("window_id")
+            if win_id:
+                mgr.apply_desktop_presence(win_id)
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_hide(*args, **kwargs):
+    """Minimize Desktop Mate companion window (does not kill process)."""
+    try:
+        import subprocess
+        from core.desktop_presence import DesktopPresenceManager
+        mgr = DesktopPresenceManager()
+        win_id = mgr.get_window_id()
+        if win_id:
+            subprocess.run(["xdotool", "windowminimize", win_id], capture_output=True, timeout=3)
+            return {"success": True, "status": "minimized", "window_id": win_id}
+        return {"success": False, "error": "No Desktop Mate window found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_status(*args, **kwargs):
+    """Return full companion status (process, window, bridge, mode, memory)."""
+    try:
+        from core.desktop_presence import DesktopPresenceManager
+        from bridge.companion_mode import default_companion_mode
+        mgr = DesktopPresenceManager()
+        proc = mgr.is_process_running()
+        win = mgr.get_window_id() if proc else None
+        rss = mgr.get_memory_usage_mb() if proc else 0.0
+        return {
+            "success": True,
+            "process_running": proc,
+            "window_id": win,
+            "rss_memory_mb": rss,
+            "companion_mode": default_companion_mode.get_mode(),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_mode_set(mode: str = "ACTIVE", **kwargs):
+    """Set companion operating mode: ACTIVE, PASSIVE, SLEEPING, DISABLED."""
+    try:
+        from bridge.companion_mode import default_companion_mode
+        return default_companion_mode.set_mode(mode.upper())
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_reset_position(*args, **kwargs):
+    """Re-apply X11 window presence hints (always-on-top, sticky)."""
+    try:
+        from core.desktop_presence import DesktopPresenceManager
+        mgr = DesktopPresenceManager()
+        win_id = mgr.get_window_id()
+        if win_id:
+            ok = mgr.apply_desktop_presence(win_id)
+            return {"success": ok, "window_id": win_id}
+        return {"success": False, "error": "No Desktop Mate window found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_idle(*args, **kwargs):
+    """Force companion back to neutral/idle state."""
+    try:
+        from bridge.desktopmate_bridge import DesktopMateBridge
+        from core.companion_state import default_companion_state
+        default_companion_state.set_state(activity="IDLE", status_text="Standing by")
+        return {"success": True, "status": "idle_requested"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_happy(*args, **kwargs):
+    """Set companion to happy expression."""
+    try:
+        from core.companion_state import default_companion_state
+        default_companion_state.set_state(activity="SUCCESS", status_text="Happy!")
+        return {"success": True, "status": "happy_requested"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_sleepy(*args, **kwargs):
+    """Set companion to sleepy/relaxed state."""
+    try:
+        from core.companion_state import default_companion_state
+        default_companion_mode_m = None
+        try:
+            from bridge.companion_mode import default_companion_mode
+            default_companion_mode_m = default_companion_mode
+        except Exception:
+            pass
+        default_companion_state.set_state(activity="SLEEPING", status_text="Sleeping...")
+        if default_companion_mode_m:
+            default_companion_mode_m.set_mode("SLEEPING")
+        return {"success": True, "status": "sleepy_requested"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_look_at(target: str = "screen", **kwargs):
+    """Set companion look-at target: mouse, screen, active_window, none."""
+    try:
+        from bridge.look_at import LookAtController, VALID_TARGETS
+        from bridge.companion_mode import default_companion_mode
+        t = str(target).lower().strip()
+        if t not in VALID_TARGETS:
+            return {"success": False, "error": f"Invalid target '{target}'. Valid: {sorted(VALID_TARGETS)}"}
+        # We can't easily get bridge here without circular deps, so broadcast event
+        from core.companion_state import default_companion_state
+        default_companion_state.broadcast("COMPANION_EVENT", {"event": "LOOK_AT", "target": t})
+        return {"success": True, "status": "look_at_requested", "target": t}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def _companion_stop_speech(*args, **kwargs):
+    """Stop active TTS speech immediately."""
+    try:
+        from core.voice import default_voice
+        default_voice.interrupt()
+        from core.companion_state import default_companion_state
+        default_companion_state.set_state(activity="IDLE", status_text="Speech stopped", speaking=False)
+        return {"success": True, "status": "speech_stopped"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+default_registry.register(Tool(
+    name="COMPANION_SHOW",
+    description="Show/ensure Desktop Mate companion is visible.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_show
+))
+
+default_registry.register(Tool(
+    name="COMPANION_HIDE",
+    description="Minimize the Desktop Mate companion window (does not kill it).",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_hide
+))
+
+default_registry.register(Tool(
+    name="COMPANION_STATUS",
+    description="Get full status of Desktop Mate companion (process, window, bridge, mode, memory).",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_status
+))
+
+default_registry.register(Tool(
+    name="COMPANION_MODE",
+    description="Set companion operating mode. mode: ACTIVE, PASSIVE, SLEEPING, DISABLED.",
+    parameters={"mode": "string (ACTIVE|PASSIVE|SLEEPING|DISABLED)"},
+    risk_level="LOW",
+    func=_companion_mode_set
+))
+
+default_registry.register(Tool(
+    name="COMPANION_RESET_POSITION",
+    description="Re-apply always-on-top and sticky X11 window hints for Desktop Mate.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_reset_position
+))
+
+default_registry.register(Tool(
+    name="COMPANION_IDLE",
+    description="Return companion to idle/neutral state.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_idle
+))
+
+default_registry.register(Tool(
+    name="COMPANION_HAPPY",
+    description="Set companion to happy expression.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_happy
+))
+
+default_registry.register(Tool(
+    name="COMPANION_SLEEPY",
+    description="Set companion to sleepy mode.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_sleepy
+))
+
+default_registry.register(Tool(
+    name="COMPANION_LOOK_AT",
+    description="Set companion look-at target. target: mouse, screen, active_window, none.",
+    parameters={"target": "string (mouse|screen|active_window|none)"},
+    risk_level="LOW",
+    func=_companion_look_at
+))
+
+default_registry.register(Tool(
+    name="COMPANION_STOP_SPEECH",
+    description="Stop active TTS speech immediately.",
+    parameters={},
+    risk_level="LOW",
+    func=_companion_stop_speech
+))

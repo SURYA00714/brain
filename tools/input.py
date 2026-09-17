@@ -513,3 +513,75 @@ def hotkey(keys):
     except Exception as e:
         return f"Error executing hotkey {clean_keys}: {str(e)}"
 
+
+# ----------------------------------------------------------------------
+# Stage 8F Safe Semantic Action Wrappers
+# ----------------------------------------------------------------------
+
+def click_semantic_element(role=None, label=None, text=None, element_id=None):
+    """
+    Stage 8F — Safe semantic element click wrapper.
+    Resolves target via TargetResolver against fused perception before clicking.
+    """
+    if element_id and not role and not label and not text:
+        return click_element(element_id)
+
+    from core.perception import default_perception_router
+    from core.target_resolver import default_target_resolver
+    perc = default_perception_router.perceive()
+    status, elem, reason = default_target_resolver.resolve(
+        elements=perc.ui_elements,
+        role=role,
+        label=label,
+        text=text,
+        observation_timestamp=perc.timestamp
+    )
+
+    if status != "RESOLVED" or not elem:
+        return f"Error: Target resolution failed ({status}): {reason}"
+
+    center = elem.center_coordinates()
+    return click_mouse(center["x"], center["y"])
+
+
+def type_into_semantic_element(text, role=None, label=None, element_id=None):
+    """
+    Stage 8F — Safe semantic element text typing wrapper.
+    Resolves target, clicks to focus, then types text.
+    """
+    if element_id and not role and not label:
+        return type_in_element(element_id, text)
+
+    from core.perception import default_perception_router
+    from core.target_resolver import default_target_resolver
+    perc = default_perception_router.perceive()
+    status, elem, reason = default_target_resolver.resolve(
+        elements=perc.ui_elements,
+        role=role or "textbox",
+        label=label,
+        observation_timestamp=perc.timestamp
+    )
+
+    if status != "RESOLVED" or not elem:
+        return f"Error: Target resolution failed ({status}): {reason}"
+
+    center = elem.center_coordinates()
+    click_res = click_mouse(center["x"], center["y"])
+    if isinstance(click_res, str) and "Error" in click_res:
+        return click_res
+    return type_text(text)
+
+
+def focus_semantic_element(role=None, label=None, element_id=None):
+    """Focuses a target UI element by clicking its center bounds."""
+    return click_semantic_element(role=role, label=label, element_id=element_id)
+
+
+def select_semantic_element(option, role="dropdown", label=None):
+    """Selects an option from a dropdown UI element."""
+    c_res = click_semantic_element(role=role, label=label)
+    if isinstance(c_res, str) and "Error" in c_res:
+        return c_res
+    return type_text(option)
+
+

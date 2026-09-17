@@ -111,6 +111,30 @@ class CompanionHTTPHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
+        # 4. Companion status API (DM process, mode, memory, bridge)
+        if parsed.path == "/api/companion":
+            try:
+                from core.desktop_presence import DesktopPresenceManager
+                from bridge.companion_mode import default_companion_mode
+                mgr = DesktopPresenceManager()
+                proc = mgr.is_process_running()
+                rss = mgr.get_memory_usage_mb() if proc else 0.0
+                companion_data = {
+                    "process_running": proc,
+                    "rss_memory_mb": rss,
+                    "companion_mode": default_companion_mode.get_mode(),
+                }
+            except Exception as e:
+                companion_data = {"error": str(e)}
+            payload = json.dumps(companion_data).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
         return super().do_GET()
 
     def do_POST(self):
