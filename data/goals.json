@@ -1,5 +1,5 @@
 {
-  "active_goal_id": "goal_1789578435",
+  "active_goal_id": "goal_1789634114",
   "goals": {
     "goal_1789567964": {
       "id": "goal_1789567964",
@@ -208,6 +208,64 @@
       "next_action": "Design HTML/CSS frontend",
       "created_at": 1789578435.9531674,
       "updated_at": 1789578435.9531674
+    },
+    "goal_1789633991": {
+      "id": "goal_1789633991",
+      "objective": "Build desktop companion avatar",
+      "status": "RUNNING",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Design HTML/CSS frontend",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        },
+        {
+          "id": 2,
+          "title": "Implement HTTP backend server",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        }
+      ],
+      "current_subtask_idx": 0,
+      "evidence": [],
+      "last_action": null,
+      "next_action": "Design HTML/CSS frontend",
+      "created_at": 1789633991.961498,
+      "updated_at": 1789633991.9614983
+    },
+    "goal_1789634114": {
+      "id": "goal_1789634114",
+      "objective": "Build desktop companion avatar",
+      "status": "RUNNING",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Design HTML/CSS frontend",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        },
+        {
+          "id": 2,
+          "title": "Implement HTTP backend server",
+          "status": "PENDING",
+          "result": null,
+          "blocking_reason": null,
+          "evidence": []
+        }
+      ],
+      "current_subtask_idx": 0,
+      "evidence": [],
+      "last_action": null,
+      "next_action": "Design HTML/CSS frontend",
+      "created_at": 1789634114.7406487,
+      "updated_at": 1789634114.7406487
     }
   }
 }
