@@ -349,11 +349,10 @@ class DesktopMateBridge:
             "error": "No response confirmation from Desktop Mate runtime"
         }
 
-    def play_animation(self, name: str) -> Dict[str, Any]:
+    def play_animation(self, name: str, timeout: float = 3.0) -> Dict[str, Any]:
         """
         Request a character animation.
-        Returns executed_unverified at best — actual animation verification
-        requires runtime confirmation from the plugin.
+        Returns verified status dictionary when runtime confirms animation state hash.
         """
         if not name or not isinstance(name, str) or len(name) > 100:
             return {"success": False, "status": ActionStatus.FAILED.value,
@@ -363,7 +362,28 @@ class DesktopMateBridge:
             return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
                     "error": "Bridge not connected"}
 
-        return self._send_fire_and_forget("play_animation", {"name": name})
+        resp = self.send_and_wait("play_animation", {"name": name}, timeout=timeout)
+        if resp:
+            if resp.get("success"):
+                return {
+                    "success": True,
+                    "status": resp.get("status", "verified"),
+                    "data": resp.get("data", {})
+                }
+            else:
+                err_obj = resp.get("error") or {}
+                err_msg = err_obj.get("message") if isinstance(err_obj, dict) else str(err_obj)
+                return {
+                    "success": False,
+                    "status": resp.get("status", "failed"),
+                    "error": err_msg or "Failed to execute animation in runtime"
+                }
+
+        return {
+            "success": False,
+            "status": ActionStatus.EXECUTED_UNVERIFIED.value,
+            "error": "No response confirmation from Desktop Mate runtime"
+        }
 
     def play_voice(self, audio_path: str) -> Dict[str, Any]:
         """

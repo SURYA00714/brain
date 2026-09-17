@@ -1231,6 +1231,16 @@ def run_brain():
         from body.server import start_companion_server, launch_companion_window
         from core.watcher import default_watcher
         from bridge import DesktopMateBridge
+        from core.desktop_presence import DesktopPresenceManager
+
+        # Ensure live Desktop Mate desktop presence
+        presence_mgr = DesktopPresenceManager()
+        pres_res = presence_mgr.ensure_running()
+        if pres_res.get("success"):
+            print(f"Brain: Live Desktop Mate active (Window ID: {pres_res.get('window_id')})")
+        else:
+            print(f"Brain Notice: Desktop Mate desktop presence status: {pres_res.get('error')}")
+
         start_companion_server(host=companion_config.avatar.host, port=companion_config.avatar.port)
         launch_companion_window()
         
@@ -1241,7 +1251,7 @@ def run_brain():
 
         if companion_config.presence.background_watcher:
             default_watcher.start()
-        print(f"Brain: Companion avatar active at http://{companion_config.avatar.host}:{companion_config.avatar.port}/ | Voice active")
+        print(f"Brain: Companion active | Live Desktop Mate & Bridge online")
 
     print("Brain PC Assistant ready. Type 'exit' to quit.")
 

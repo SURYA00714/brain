@@ -37,16 +37,16 @@ PRIORITY = {
 # expression: VRM 1.0 verified preset name
 # animation_hint: sent to plugin, but actual availability depends on runtime
 STATE_REACTIONS: Dict[str, Dict[str, Optional[str]]] = {
-    "THINKING":  {"expression": "neutral",   "animation": None},
-    "SEARCHING": {"expression": "neutral",   "animation": None},
-    "WORKING":   {"expression": "neutral",   "animation": None},
-    "SUCCESS":   {"expression": "happy",     "animation": None},
+    "THINKING":  {"expression": "relaxed",   "animation": None},
+    "SEARCHING": {"expression": "surprised", "animation": None},
+    "WORKING":   {"expression": "happy",     "animation": "tuttuki"},
+    "SUCCESS":   {"expression": "happy",     "animation": "nadenade"},
     "ERROR":     {"expression": "sad",       "animation": None},
     "CONFUSED":  {"expression": "surprised", "animation": None},
     "WARNING":   {"expression": "angry",     "animation": None},
     "SPEAKING":  {"expression": "happy",     "animation": None},
     "LISTENING": {"expression": "neutral",   "animation": None},
-    "IDLE":      {"expression": "neutral",   "animation": None},
+    "IDLE":      {"expression": "neutral",   "animation": "idle"},
     "SLEEPING":  {"expression": "relaxed",   "animation": None},
     "WAITING":   {"expression": "relaxed",   "animation": None},
 }
