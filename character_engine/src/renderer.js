@@ -129,6 +129,9 @@ function setupCommandListener() {
               character.sit();
             }
             break;
+          case 'pet':
+            character.pet();
+            break;
         }
       } catch (e) { console.error('[CMD]', e); }
     });

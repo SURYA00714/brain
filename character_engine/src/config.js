@@ -19,7 +19,7 @@ export const CONFIG = {
     z: 5.0,
   },
   mouse: {
-    trackingEnabled: true,
+    trackingEnabled: false,   // Permanently disabled: polling X11 causes pointer deadlocks
     smoothing: 0.06,
     headLimitX: 0.4,
     headLimitY: 0.5,

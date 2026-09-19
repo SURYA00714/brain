@@ -165,6 +165,19 @@ export class CharacterController {
     }, 2000);
   }
 
+  pet() {
+    this.emotion.onPetting();
+    this.state.transition(STATE.INTERACTING, PRIORITY.INTERACTION);
+    this.animation.play('pet');
+    this.expression.setEmotion('happy');
+    setTimeout(() => {
+      if (this.state.state === STATE.INTERACTING) {
+        this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
+        this.expression.setEmotion('neutral');
+      }
+    }, 2500);
+  }
+
   // === MAIN UPDATE LOOP ===
 
   update(delta) {
@@ -172,50 +185,7 @@ export class CharacterController {
     try {
       const dt = Math.min(delta, CONFIG.performance.maxDeltaTime);
 
-      // 1. Mouse updates
-      this.mouse.update(dt);
-
-      // 2. Cursor perception & Petting detection (Bible Section 16, 18, 19)
-      const headX = this.movement.desktopX;
-      // Head is roughly 250px above screen bottom ground
-      const headY = this.desktop.screenH - (CONFIG.character.homePaddingBottom || 60) - 220;
-      const distToHead = Math.hypot(this.mouse.x - headX, this.mouse.y - headY);
-
-      if (this._petCooldown > 0) this._petCooldown -= dt;
-
-      // Petting detection: cursor directly near head (< 80px)
-      if (distToHead < 80) {
-        if (!this._isBeingPetted && this._petCooldown <= 0) {
-          this._isBeingPetted = true;
-          this.emotion.onPetting();
-          this.state.transition(STATE.INTERACTING, PRIORITY.INTERACTION);
-          this.animation.play('pet');
-          this.expression.setEmotion('happy');
-        }
-      } else if (distToHead > 120 && this._isBeingPetted) {
-        // Petting finished: return smoothly to life
-        this._isBeingPetted = false;
-        this._petCooldown = 2.0; // 2 sec cooldown before next pet trigger
-        setTimeout(() => {
-          if (this.state.state === STATE.INTERACTING) {
-            this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
-            this.expression.setEmotion('neutral');
-          }
-        }, 1200);
-      }
-
-      // 3. Natural look-at logic
-      if (this._mouseMode !== 'PASSIVE' && !this._isBeingPetted) {
-        if (distToHead < 480) {
-          // Look at cursor when nearby
-          const target = this.mouse.getWorldLookTarget();
-          this.lookAt.setTarget(target.x, target.y);
-        } else {
-          // Idle forward glance when cursor is far away
-          const worldCharX = this.desktop.desktopXToWorld(headX);
-          this.lookAt.setTarget(worldCharX, 1.2);
-        }
-      }
+      // 1. Natural autonomous lookAt update (glancing around)
       this.lookAt.update(dt);
 
       // 4. Follow mouse mode
