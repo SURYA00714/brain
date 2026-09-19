@@ -3,11 +3,11 @@ import { CONFIG } from './config.js';
 import { CharacterController } from './character/CharacterController.js';
 
 // ============================================================
-// ONE RENDER LOOP. Global error handlers. Keyboard debug controls.
+// STABLE RENDER LOOP WITH STRICT FPS THROTTLING & CPU/GPU GUARD
 // ============================================================
 
 let renderer, scene, camera, character;
-let clock;
+let lastFrameTime = 0;
 
 function init() {
   try {
@@ -18,10 +18,11 @@ function init() {
       canvas,
       alpha: true,
       antialias: true,
-      powerPreference: 'low-power'
+      powerPreference: 'low-power',
+      precision: 'mediump'
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x000000, 0);
 
     scene = new THREE.Scene();
@@ -33,15 +34,12 @@ function init() {
       CONFIG.camera.near,
       CONFIG.camera.far
     );
-    // We'll set camera.position.y after character loads (uses DesktopCoordinates.camY)
 
     // Lights
     const dirLight = new THREE.DirectionalLight(0xffffff, Math.PI);
     dirLight.position.set(1, 1, 1).normalize();
     scene.add(dirLight);
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-
-    clock = new THREE.Clock();
 
     character = new CharacterController(scene);
     character.load().then(() => {
@@ -57,8 +55,9 @@ function init() {
 
     window.addEventListener('resize', onResize);
 
-    // Start ONE loop
-    animate();
+    // Start FPS-capped loop
+    lastFrameTime = performance.now();
+    requestAnimationFrame(animate);
 
   } catch (err) {
     console.error('[RENDER] Init failed:', err);
@@ -66,15 +65,28 @@ function init() {
   }
 }
 
-function animate() {
+function animate(now) {
   requestAnimationFrame(animate);
+
+  // FPS Capping to prevent GPU/CPU saturation
+  const isIdle = character && (character.state.state === 'SLEEPING' || character.state.state === 'SITTING');
+  const targetFPS = isIdle ? (CONFIG.performance.idleFPS || 15) : (CONFIG.performance.targetFPS || 30);
+  const frameInterval = 1000 / targetFPS;
+
+  const elapsed = now - lastFrameTime;
+  if (elapsed < frameInterval - 1) {
+    return; // Skip frame to keep CPU/GPU cool
+  }
+
+  // Calculate delta, capped at maxDeltaTime (0.033s) to prevent physics jumps
+  const deltaSeconds = Math.min(elapsed / 1000, CONFIG.performance.maxDeltaTime || 0.033);
+  lastFrameTime = now - (elapsed % frameInterval);
+
   try {
-    const delta = clock.getDelta();
-    if (character) character.update(delta);
+    if (character) character.update(deltaSeconds);
     renderer.render(scene, camera);
   } catch (err) {
     console.error('[RENDER] Frame error:', err);
-    // Don't stop — try next frame
   }
 }
 

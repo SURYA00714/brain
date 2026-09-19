@@ -12,8 +12,12 @@ import { EmotionalState } from './EmotionalState.js';
 import { DayNightCycle } from './DayNightCycle.js';
 
 /**
- * CharacterController — central orchestrator.
- * All subsystems updated from ONE external loop.
+ * CharacterController — Central orchestrator for Ao.
+ * Human-like behavior:
+ * - Logical perception (proximity, head detection)
+ * - Petting interaction with emotional feedback
+ * - Coherent activities with execution and return paths
+ * - Autonomous state machine with priority management
  */
 export class CharacterController {
   constructor(scene) {
@@ -31,6 +35,8 @@ export class CharacterController {
     this.idleBehavior = new IdleBehaviorEngine(this);
 
     this._mouseMode = 'LOOK_ONLY'; // PASSIVE, LOOK_ONLY, FOLLOW
+    this._isBeingPetted = false;
+    this._petCooldown = 0;
     this._loaded = false;
 
     this.state.onTransition((old, next) => this._onStateChange(old, next));
@@ -54,7 +60,24 @@ export class CharacterController {
     }
   }
 
-  // === API ===
+  // === Async Activity Helpers ===
+  wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  waitForArrival(timeoutMs = 10000) {
+    return new Promise(resolve => {
+      const startTime = Date.now();
+      const check = setInterval(() => {
+        if (!this.movement.isMoving || (Date.now() - startTime) >= timeoutMs) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+
+  // === Core API ===
 
   idle() {
     this.movement.stop();
@@ -142,24 +165,60 @@ export class CharacterController {
     }, 2000);
   }
 
-  // === MAIN UPDATE ===
+  // === MAIN UPDATE LOOP ===
 
   update(delta) {
     if (!this._loaded) return;
     try {
       const dt = Math.min(delta, CONFIG.performance.maxDeltaTime);
 
-      // Mouse
+      // 1. Mouse updates
       this.mouse.update(dt);
 
-      // Look-at from mouse
-      if (this._mouseMode !== 'PASSIVE') {
-        const target = this.mouse.getWorldLookTarget();
-        this.lookAt.setTarget(target.x, target.y);
+      // 2. Cursor perception & Petting detection (Bible Section 16, 18, 19)
+      const headX = this.movement.desktopX;
+      // Head is roughly 250px above screen bottom ground
+      const headY = this.desktop.screenH - (CONFIG.character.homePaddingBottom || 60) - 220;
+      const distToHead = Math.hypot(this.mouse.x - headX, this.mouse.y - headY);
+
+      if (this._petCooldown > 0) this._petCooldown -= dt;
+
+      // Petting detection: cursor directly near head (< 80px)
+      if (distToHead < 80) {
+        if (!this._isBeingPetted && this._petCooldown <= 0) {
+          this._isBeingPetted = true;
+          this.emotion.onPetting();
+          this.state.transition(STATE.INTERACTING, PRIORITY.INTERACTION);
+          this.animation.play('pet');
+          this.expression.setEmotion('happy');
+        }
+      } else if (distToHead > 120 && this._isBeingPetted) {
+        // Petting finished: return smoothly to life
+        this._isBeingPetted = false;
+        this._petCooldown = 2.0; // 2 sec cooldown before next pet trigger
+        setTimeout(() => {
+          if (this.state.state === STATE.INTERACTING) {
+            this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
+            this.expression.setEmotion('neutral');
+          }
+        }, 1200);
+      }
+
+      // 3. Natural look-at logic
+      if (this._mouseMode !== 'PASSIVE' && !this._isBeingPetted) {
+        if (distToHead < 480) {
+          // Look at cursor when nearby
+          const target = this.mouse.getWorldLookTarget();
+          this.lookAt.setTarget(target.x, target.y);
+        } else {
+          // Idle forward glance when cursor is far away
+          const worldCharX = this.desktop.desktopXToWorld(headX);
+          this.lookAt.setTarget(worldCharX, 1.2);
+        }
       }
       this.lookAt.update(dt);
 
-      // Follow mouse mode
+      // 4. Follow mouse mode
       if (this._mouseMode === 'FOLLOW') {
         const dx = this.mouse.x - this.movement.desktopX;
         if (Math.abs(dx) > CONFIG.mouse.followDeadZone) {
@@ -170,10 +229,10 @@ export class CharacterController {
         }
       }
 
-      // Movement
+      // 5. Movement update
       this.movement.update(dt);
 
-      // Auto-transitions
+      // 6. Auto-transitions
       const st = this.state.state;
       if (st === STATE.WALKING && !this.movement.isMoving) {
         this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
@@ -182,7 +241,6 @@ export class CharacterController {
         this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
       }
       if (st === STATE.JUMPING && !this.movement.isAirborne && !this.movement.isMoving) {
-        // Brief landing animation
         this.state.transition(STATE.LANDING, PRIORITY.AUTONOMOUS);
         this.animation.play('land');
         setTimeout(() => {
@@ -190,10 +248,10 @@ export class CharacterController {
         }, 400);
       }
 
-      // Animation
+      // 7. Animation update
       this.animation.update(dt);
 
-      // VRM update (spring bones etc)
+      // 8. VRM update (spring bones etc)
       this.vrm.update(dt);
     } catch (e) {
       console.error('[AO] Update error:', e);
@@ -210,17 +268,18 @@ export class CharacterController {
         [STATE.FALLING]: 'jump',
         [STATE.LANDING]: 'land',
         [STATE.SITTING]: 'sit',
-        [STATE.READING]: 'sit',
+        [STATE.READING]: 'read',
         [STATE.SLEEPING]: 'sleep',
         [STATE.WAKING]: 'idle',
         [STATE.RETURNING_HOME]: 'walk',
         [STATE.FOLLOWING_MOUSE]: 'idle',
+        [STATE.INTERACTING]: 'pet',
       };
       const anim = animMap[next];
       if (anim) this.animation.play(anim);
 
       // Stop movement on static states
-      if ([STATE.IDLE, STATE.SITTING, STATE.SLEEPING, STATE.READING, STATE.LANDING, STATE.DISABLED].includes(next)) {
+      if ([STATE.IDLE, STATE.SITTING, STATE.SLEEPING, STATE.READING, STATE.LANDING, STATE.DISABLED, STATE.INTERACTING].includes(next)) {
         this.movement.stop();
       }
 

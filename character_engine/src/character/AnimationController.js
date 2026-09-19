@@ -1,9 +1,10 @@
 import { Logger } from '../logger.js';
 
 /**
- * AnimationController - procedural bone animations.
- * Supports: idle, walk, run, jump, land, sit, sleep, wave, stretch, yawn.
- * All procedural (no animation clips needed).
+ * AnimationController - procedural bone animations for Ao.
+ * Supports: idle, walk, run, jump, land, sit, sleep, wave, stretch, yawn,
+ *           read, drink, phone, music, pet, confused.
+ * All procedural, lightweight, zero asset loading needed.
  */
 export class AnimationController {
   constructor(vrmAdapter) {
@@ -43,6 +44,12 @@ export class AnimationController {
         case 'wave': this._animWave(delta); break;
         case 'stretch': this._animStretch(delta); break;
         case 'yawn': this._animYawn(delta); break;
+        case 'read': this._animRead(delta); break;
+        case 'drink': this._animDrink(delta); break;
+        case 'phone': this._animPhone(delta); break;
+        case 'music': this._animMusic(delta); break;
+        case 'pet': this._animPet(delta); break;
+        case 'confused': this._animConfused(delta); break;
         default: this._animIdle(delta);
       }
     } catch (e) {
@@ -118,7 +125,6 @@ export class AnimationController {
   }
 
   _animLand(delta) {
-    // Crouch on landing
     const ll = this._vrm.getBone('leftUpperLeg');
     const rl = this._vrm.getBone('rightUpperLeg');
     const llk = this._vrm.getBone('leftLowerLeg');
@@ -128,7 +134,6 @@ export class AnimationController {
     if (llk) llk.rotation.x = this._lerp(llk.rotation.x, 0.4, 0.2);
     if (rlk) rlk.rotation.x = this._lerp(rlk.rotation.x, 0.4, 0.2);
 
-    // Arms balance
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
     if (la) la.rotation.z = this._lerp(la.rotation.z, 1.3, 0.15);
@@ -141,17 +146,16 @@ export class AnimationController {
     const leftLower = this._vrm.getBone('leftLowerLeg');
     const rightLower = this._vrm.getBone('rightLowerLeg');
 
-    if (leftLeg) leftLeg.rotation.x = this._lerp(leftLeg.rotation.x, -1.5, 0.06);
-    if (rightLeg) rightLeg.rotation.x = this._lerp(rightLeg.rotation.x, -1.5, 0.06);
-    if (leftLower) leftLower.rotation.x = this._lerp(leftLower.rotation.x, 1.5, 0.06);
-    if (rightLower) rightLower.rotation.x = this._lerp(rightLower.rotation.x, 1.5, 0.06);
+    if (leftLeg) leftLeg.rotation.x = this._lerp(leftLeg.rotation.x, -1.5, 0.08);
+    if (rightLeg) rightLeg.rotation.x = this._lerp(rightLeg.rotation.x, -1.5, 0.08);
+    if (leftLower) leftLower.rotation.x = this._lerp(leftLower.rotation.x, 1.5, 0.08);
+    if (rightLower) rightLower.rotation.x = this._lerp(rightLower.rotation.x, 1.5, 0.08);
 
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
     if (la) la.rotation.z = this._lerp(la.rotation.z, 0.8, 0.06);
     if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -0.8, 0.06);
 
-    // Slight breathing
     const spine = this._vrm.getBone('spine');
     if (spine) spine.rotation.x = Math.sin(this._time * 1.2) * 0.01;
   }
@@ -163,7 +167,6 @@ export class AnimationController {
     const spine = this._vrm.getBone('spine');
     if (spine) spine.rotation.x = Math.sin(this._time * 0.8) * 0.025;
 
-    // Relaxed arms
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
     if (la) la.rotation.z = this._lerp(la.rotation.z, 0.9, 0.03);
@@ -191,9 +194,107 @@ export class AnimationController {
     const head = this._vrm.getBone('head');
     if (head) head.rotation.x = this._lerp(head.rotation.x, -0.15, 0.05);
 
-    // One hand near mouth
     const ra = this._vrm.getBone('rightUpperArm');
     if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.8, 0.08);
+  }
+
+  _animRead(delta) {
+    // Sitting posture with book held in lap/hands
+    this._animSit(delta);
+
+    // Head tilted down toward the book
+    const head = this._vrm.getBone('head');
+    if (head) head.rotation.x = this._lerp(head.rotation.x, 0.25 + Math.sin(this._time * 0.8) * 0.02, 0.08);
+
+    // Hands holding book in front
+    const la = this._vrm.getBone('leftUpperArm');
+    const ra = this._vrm.getBone('rightUpperArm');
+    const lla = this._vrm.getBone('leftLowerArm');
+    const rla = this._vrm.getBone('rightLowerArm');
+
+    if (la) la.rotation.z = this._lerp(la.rotation.z, 0.5, 0.08);
+    if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -0.5, 0.08);
+    if (lla) lla.rotation.y = this._lerp(lla.rotation.y, 0.8, 0.08);
+
+    // Occasional page turn gesture every ~8 seconds
+    const pageTurn = Math.sin(this._time * 0.8);
+    if (rla) rla.rotation.y = this._lerp(rla.rotation.y, -0.8 + (pageTurn > 0.95 ? 0.3 : 0), 0.1);
+  }
+
+  _animDrink(delta) {
+    // Standing or sitting drink animation cycle (takes ~4-5 seconds)
+    const cycle = (this._time % 5.0);
+    const head = this._vrm.getBone('head');
+    const ra = this._vrm.getBone('rightUpperArm');
+    const rla = this._vrm.getBone('rightLowerArm');
+
+    if (cycle < 2.0) {
+      // Raising cup to mouth
+      const progress = cycle / 2.0;
+      if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.6, progress * 0.1);
+      if (rla) rla.rotation.x = this._lerp(rla.rotation.x, -1.2, progress * 0.1);
+      if (head) head.rotation.x = this._lerp(head.rotation.x, -0.15, progress * 0.1);
+    } else if (cycle < 3.5) {
+      // Savoring / sipping
+      if (head) head.rotation.x = this._lerp(head.rotation.x, -0.2, 0.08);
+    } else {
+      // Lowering cup
+      if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.1, 0.08);
+      if (rla) rla.rotation.x = this._lerp(rla.rotation.x, 0, 0.08);
+      if (head) head.rotation.x = this._lerp(head.rotation.x, 0, 0.08);
+    }
+  }
+
+  _animPhone(delta) {
+    // Check phone: right hand held up in front, head angled down
+    const head = this._vrm.getBone('head');
+    const ra = this._vrm.getBone('rightUpperArm');
+    const rla = this._vrm.getBone('rightLowerArm');
+
+    if (head) head.rotation.x = this._lerp(head.rotation.x, 0.3, 0.08);
+    if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -0.7, 0.08);
+    if (rla) rla.rotation.y = this._lerp(rla.rotation.y, -1.0 + Math.sin(this._time * 3) * 0.05, 0.1);
+  }
+
+  _animMusic(delta) {
+    // Gentle rhythm sway
+    const sway = Math.sin(this._time * 2.5) * 0.06;
+    const head = this._vrm.getBone('head');
+    const spine = this._vrm.getBone('spine');
+
+    if (head) head.rotation.z = sway;
+    if (spine) spine.rotation.z = -sway * 0.5;
+
+    // Relaxed arms
+    const la = this._vrm.getBone('leftUpperArm');
+    const ra = this._vrm.getBone('rightUpperArm');
+    if (la) la.rotation.z = this._lerp(la.rotation.z, 1.0, 0.05);
+    if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.0, 0.05);
+  }
+
+  _animPet(delta) {
+    // Affectionate response to petting
+    const head = this._vrm.getBone('head');
+    const spine = this._vrm.getBone('spine');
+
+    // Soft head tilt leaning into the touch
+    if (head) head.rotation.z = this._lerp(head.rotation.z, 0.15, 0.1);
+    if (head) head.rotation.x = this._lerp(head.rotation.x, -0.08, 0.1);
+    if (spine) spine.rotation.x = Math.sin(this._time * 1.0) * 0.02;
+
+    // Gentle arm posture
+    const la = this._vrm.getBone('leftUpperArm');
+    const ra = this._vrm.getBone('rightUpperArm');
+    if (la) la.rotation.z = this._lerp(la.rotation.z, 0.9, 0.05);
+    if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -0.9, 0.05);
+  }
+
+  _animConfused(delta) {
+    const head = this._vrm.getBone('head');
+    if (head) head.rotation.z = this._lerp(head.rotation.z, -0.25, 0.08);
+
+    const ra = this._vrm.getBone('rightUpperArm');
+    if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.3, 0.08);
   }
 
   _resetPose() {

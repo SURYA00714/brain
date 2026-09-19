@@ -3,18 +3,20 @@ import { ActivityRegistry } from './ActivityRegistry.js';
 import { STATE, PRIORITY } from './CharacterState.js';
 
 /**
- * IdleBehaviorEngine — drives autonomous behavior.
- * Uses emotional state + day/night + activity registry.
+ * IdleBehaviorEngine — drives autonomous, human-like behavior.
+ * Uses emotional state + day/night awareness + activity cooldowns.
  * Timer-based, NOT per-frame expensive.
  */
 export class IdleBehaviorEngine {
   constructor(characterController) {
     this._char = characterController;
-    this._activities = new ActivityRegistry();
+    this._activities = new ActivityRegistry(characterController);
     this._behaviorTimer = null;
     this._emotionTimer = null;
     this._started = false;
   }
+
+  get activities() { return this._activities; }
 
   start() {
     if (this._started) return;
@@ -30,82 +32,53 @@ export class IdleBehaviorEngine {
     this._activities.stop();
   }
 
-  /** Slow emotion update — once per 30 seconds. */
+  /** Slow emotion update — once per 20 seconds. */
   _scheduleEmotionUpdate() {
     this._emotionTimer = setInterval(() => {
       try {
-        const isActive = this._char.state.state !== STATE.IDLE;
+        const isActive = this._char.state.state !== STATE.IDLE && this._char.state.state !== STATE.SITTING;
         this._char.dayNight.update();
         this._char.emotion.update(isActive, this._char.dayNight.isNight);
       } catch (e) { /* safe */ }
-    }, 30000);
+    }, 20000);
   }
 
   /** Schedule next autonomous behavior check. */
   _scheduleBehavior() {
     if (!this._started) return;
 
-    const base = CONFIG.behavior.idleActivityMinMs;
-    const variance = CONFIG.behavior.idleActivityVarianceMs;
+    const base = CONFIG.behavior.idleActivityMinMs || 15000;
+    const variance = CONFIG.behavior.idleActivityVarianceMs || 20000;
     const nightMul = this._char.dayNight?.activityMultiplier || 1.0;
     const delay = (base + Math.random() * variance) / nightMul;
 
-    this._behaviorTimer = setTimeout(() => {
+    this._behaviorTimer = setTimeout(async () => {
       try {
-        this._tryAutonomousBehavior();
+        await this._tryAutonomousBehavior();
       } catch (e) { /* safe */ }
       this._scheduleBehavior();
     }, delay);
   }
 
-  _tryAutonomousBehavior() {
-    // Only act when idle
-    if (this._char.state.state !== STATE.IDLE) return;
+  async _tryAutonomousBehavior() {
+    // Only act when idle or sitting passively with no active activity
+    const currentState = this._char.state.state;
+    if (currentState !== STATE.IDLE && currentState !== STATE.SITTING) return;
     if (this._activities.isActive) return;
 
     const emo = this._char.emotion;
+    const dayNight = this._char.dayNight;
 
-    // Priority checks
-    if (emo.shouldSleep) {
-      this._char.goHome();
-      setTimeout(() => {
-        try {
-          this._char.sleep();
-          emo.onSleep();
-        } catch (e) {}
-      }, 5000);
-      return;
-    }
-
-    if (emo.isTired) {
-      this._char.goHome();
-      emo.onRest();
-      return;
-    }
-
-    // Pick from activity registry
-    const activity = this._activities.pickActivity(emo);
+    // Pick from activity registry with logical filtering
+    const activity = this._activities.pickActivity(emo, dayNight);
     if (!activity) return;
 
-    this._activities.start(activity);
-    emo.onActivity();
-
-    // Execute the activity
-    if (activity.needsWalk) {
-      // Wander: pick a random desktop X
-      const targetX = 100 + Math.random() * (this._char.desktop.screenW - 200);
-      this._char.walkTo(targetX);
-    } else if (activity.id === 'sit_rest') {
-      this._char.sit();
-    } else if (activity.id === 'sleep') {
-      this._char.goHome();
-      setTimeout(() => { try { this._char.sleep(); } catch (e) {} }, 5000);
-    } else if (activity.id === 'stretch') {
-      this._char.playAnimation('wave');
-      setTimeout(() => { try { this._char.idle(); } catch (e) {} }, 3000);
-    }
-    // look_around is handled by default idle behavior
+    console.log(`[BEHAVIOR] Starting logical activity: ${activity.name}`);
+    await this._activities.execute(activity);
   }
 
-  dispose() { this.stop(); this._activities.dispose(); }
+  dispose() {
+    this.stop();
+    this._activities.dispose();
+  }
 }

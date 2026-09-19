@@ -1,11 +1,13 @@
 import { CONFIG } from '../config.js';
 
 /**
- * MovementController — ONE source of truth for character position.
+ * MovementController — Authoritative position & human-like locomotion.
  *
- * Position is stored in DESKTOP PIXELS (desktopX).
- * jumpOffsetY is a world-space offset above the ground (0 = on ground).
- * Every frame, the final world position is computed and applied to the VRM scene.
+ * Locomotion Features:
+ * - Smooth acceleration and deceleration (ease-in / ease-out)
+ * - Turn-before-and-during movement (no moonwalking)
+ * - Deceleration zone near arrival
+ * - Clean zero-jitter stopping
  */
 export class MovementController {
   constructor(vrmAdapter, desktopCoords) {
@@ -18,22 +20,31 @@ export class MovementController {
     // Walk target (null = not walking)
     this._targetX = null;
 
+    // Current horizontal velocity
+    this._currentVelocityX = 0;
+    this._acceleration = 450;    // pixels/sec²
+    this._deceleration = 600;    // pixels/sec²
+    this._decelDistance = 80;    // pixels before target to begin braking
+
     // Jump state
-    this._jumpOffsetY = 0;   // world units above ground
+    this._jumpOffsetY = 0;       // world units above ground
     this._velocityY = 0;
     this._isAirborne = false;
 
-    // Facing direction
+    // Facing direction (VRM faces -Z, Math.PI faces camera)
     this._facingRight = true;
-    this._currentFacingAngle = Math.PI; // VRM faces -Z, we rotate to face camera
+    this._currentFacingAngle = Math.PI;
   }
 
-  get isMoving() { return this._targetX !== null; }
+  get isMoving() { return this._targetX !== null || Math.abs(this._currentVelocityX) > 5; }
   get isAirborne() { return this._isAirborne; }
+  get currentVelocity() { return this._currentVelocityX; }
 
   /** Set position immediately (desktop pixels X). */
   setDesktopX(x) {
     this.desktopX = this._desktop.clampX(x);
+    this._currentVelocityX = 0;
+    this._targetX = null;
     this._applyToVRM();
   }
 
@@ -49,6 +60,7 @@ export class MovementController {
   /** Immediate stop. */
   stop() {
     this._targetX = null;
+    this._currentVelocityX = 0;
   }
 
   /** Jump from current position. */
@@ -58,27 +70,55 @@ export class MovementController {
     this._velocityY = CONFIG.character.jumpVelocity / this._desktop.screenH * this._desktop.visibleH;
   }
 
-  /** Update each frame. */
+  /** Update each frame with delta time. */
   update(dt) {
-    let changed = false;
-
-    // --- Horizontal walk ---
+    // --- Horizontal locomotion with smooth accel/decel ---
     if (this._targetX !== null) {
       const dx = this._targetX - this.desktopX;
-      if (Math.abs(dx) <= CONFIG.character.arrivalDistance) {
+      const distance = Math.abs(dx);
+      const direction = Math.sign(dx);
+
+      if (distance <= CONFIG.character.arrivalDistance) {
+        // Arrived cleanly
         this.desktopX = this._targetX;
         this._targetX = null;
+        this._currentVelocityX = 0;
       } else {
-        const step = Math.sign(dx) * CONFIG.character.movementSpeed * dt;
-        if (Math.abs(step) > Math.abs(dx)) {
+        // Turning toward direction
+        this._facingRight = direction > 0;
+
+        // Desired speed based on distance (braking near target)
+        let maxSpeed = CONFIG.character.movementSpeed;
+        if (distance < this._decelDistance) {
+          maxSpeed = Math.max(50, maxSpeed * (distance / this._decelDistance));
+        }
+
+        const targetVel = direction * maxSpeed;
+        if (this._currentVelocityX < targetVel) {
+          this._currentVelocityX = Math.min(targetVel, this._currentVelocityX + this._acceleration * dt);
+        } else if (this._currentVelocityX > targetVel) {
+          this._currentVelocityX = Math.max(targetVel, this._currentVelocityX - this._deceleration * dt);
+        }
+
+        // Apply movement step
+        const step = this._currentVelocityX * dt;
+        if (Math.abs(step) >= distance) {
           this.desktopX = this._targetX;
           this._targetX = null;
+          this._currentVelocityX = 0;
         } else {
           this.desktopX += step;
         }
+
         this.desktopX = this._desktop.clampX(this.desktopX);
       }
-      changed = true;
+    } else {
+      // Decelerate to 0 if stopped
+      if (Math.abs(this._currentVelocityX) > 1) {
+        this._currentVelocityX -= Math.sign(this._currentVelocityX) * this._deceleration * dt;
+      } else {
+        this._currentVelocityX = 0;
+      }
     }
 
     // --- Vertical jump/gravity ---
@@ -91,14 +131,14 @@ export class MovementController {
         this._velocityY = 0;
         this._isAirborne = false;
       }
-      changed = true;
     }
 
-    // --- Apply facing ---
-    const targetAngle = this._facingRight ? Math.PI + 0.25 : Math.PI - 0.25;
-    this._currentFacingAngle += (targetAngle - this._currentFacingAngle) * CONFIG.character.turnLerp;
+    // --- Smooth natural rotation facing travel direction ---
+    // Facing angled slightly toward camera for cute 2.5D appearance (Math.PI ± 0.35)
+    const targetAngle = this._facingRight ? Math.PI + 0.35 : Math.PI - 0.35;
+    this._currentFacingAngle += (targetAngle - this._currentFacingAngle) * (CONFIG.character.turnLerp || 0.15);
 
-    // Always apply position to VRM
+    // Apply to VRM scene
     this._applyToVRM();
   }
 

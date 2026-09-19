@@ -62,7 +62,10 @@ export const CONFIG = {
     sleepDurationMs: 60000,
   },
   performance: {
-    maxDeltaTime: 0.05,
+    targetFPS: 30,             // Cap frame rate to 30 FPS max (prevents GPU overload)
+    idleFPS: 15,               // Lower frame rate when idle/sleeping
+    maxDeltaTime: 0.033,       // Max delta time clamp per frame (30 FPS equivalent)
+    maxMemoryMb: 256,          // Memory threshold for watchdog check
   },
   debug: {
     enabled: false,

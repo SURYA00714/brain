@@ -82,6 +82,18 @@ export class EmotionalState {
     this.boredom = this._clamp(this.boredom - 15);
   }
 
+  boostEnergy(amount) {
+    this.energy = this._clamp(this.energy + amount);
+    this.sleepiness = this._clamp(this.sleepiness - amount * 0.5);
+  }
+
+  onPetting() {
+    this.happiness = this._clamp(this.happiness + 10);
+    this.affection = this._clamp(this.affection + 5);
+    this.attention = this._clamp(this.attention + 15);
+    this.boredom = this._clamp(this.boredom - 15);
+  }
+
   // --- Queries ---
 
   get shouldSleep() { return this.sleepiness >= CONFIG.emotion.sleepThreshold; }
