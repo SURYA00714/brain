@@ -1,0 +1,16 @@
+{
+  "name": "character_engine",
+  "version": "1.0.0",
+  "description": "Brain Character Desktop Engine",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.3.0",
+    "three": "^0.174.0"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  }
+}
