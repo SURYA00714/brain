@@ -69,8 +69,17 @@ export class IdleBehaviorEngine {
     const emo = this._char.emotion;
     const dayNight = this._char.dayNight;
 
-    // Pick from activity registry with logical filtering
-    const activity = this._activities.pickActivity(emo, dayNight);
+    // Check if a rare creature event triggers first
+    if (this._char.creatures && this._char.creatures.trySpawn(emo, dayNight)) {
+      return;
+    }
+
+    const context = {
+      activeAppCategory: this._char.windowManager?.activeWindow?.category || 'GENERIC',
+    };
+
+    // Pick from activity registry with logical Utility AI filtering
+    const activity = this._activities.pickActivity(emo, dayNight, context);
     if (!activity) return;
 
     console.log(`[BEHAVIOR] Starting logical activity: ${activity.name}`);

@@ -10,14 +10,18 @@ import { DesktopCoordinates } from './DesktopCoordinates.js';
 import { IdleBehaviorEngine } from './IdleBehaviorEngine.js';
 import { EmotionalState } from './EmotionalState.js';
 import { DayNightCycle } from './DayNightCycle.js';
+import { WindowManager } from '../world/WindowManager.js';
+import { CreatureEngine } from '../world/CreatureEngine.js';
+import { VoiceController } from '../mind/VoiceController.js';
+import { BrainBridge } from '../bridge/BrainBridge.js';
 
 /**
  * CharacterController — Central orchestrator for Ao.
- * Human-like behavior:
- * - Logical perception (proximity, head detection)
- * - Petting interaction with emotional feedback
- * - Coherent activities with execution and return paths
- * - Autonomous state machine with priority management
+ * Architecture:
+ * - Body: VRM, Movement, Animation, Expressions, LookAt, Physics
+ * - Mind: EmotionalState, Utility AI decision-making, Voice, DayNightCycle
+ * - World: DesktopCoordinates, WindowManager, CreatureEngine, Home
+ * - Bridge: BrainBridge loopback API
  */
 export class CharacterController {
   constructor(scene) {
@@ -32,11 +36,14 @@ export class CharacterController {
     this.mouse = new MouseTracker(this.desktop);
     this.emotion = new EmotionalState();
     this.dayNight = new DayNightCycle();
+    this.windowManager = new WindowManager(this.desktop);
+    this.creatures = new CreatureEngine(this);
+    this.voice = new VoiceController(this.vrm);
     this.idleBehavior = new IdleBehaviorEngine(this);
+    this.bridge = new BrainBridge(this);
 
-    this._mouseMode = 'LOOK_ONLY'; // PASSIVE, LOOK_ONLY, FOLLOW
-    this._isBeingPetted = false;
-    this._petCooldown = 0;
+    this._mouseMode = 'LOOK_ONLY';
+    this._currentWindowAnchor = null;
     this._loaded = false;
 
     this.state.onTransition((old, next) => this._onStateChange(old, next));
@@ -52,9 +59,12 @@ export class CharacterController {
 
       this.expression.start();
       this.mouse.start();
+      this.windowManager.start();
       this.idleBehavior.start();
+      this.bridge.start();
+
       this._loaded = true;
-      console.log('[AO] Loaded. Home at X=' + Math.round(this.desktop.homeX));
+      console.log('[AO] Fully loaded. Home at X=' + Math.round(this.desktop.homeX));
     } catch (err) {
       console.error('[AO] Load failed:', err);
     }
@@ -77,14 +87,16 @@ export class CharacterController {
     });
   }
 
-  // === Core API ===
+  // === Core Actions API ===
 
   idle() {
     this.movement.stop();
+    this._currentWindowAnchor = null;
     this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
   }
 
   walkTo(desktopX) {
+    this._currentWindowAnchor = null;
     if (this.state.transition(STATE.WALKING, PRIORITY.AUTONOMOUS)) {
       this.movement.walkTo(desktopX);
     }
@@ -93,6 +105,7 @@ export class CharacterController {
   walkToDesktop(x) { this.walkTo(x); }
 
   goHome() {
+    this._currentWindowAnchor = null;
     if (this.state.transition(STATE.RETURNING_HOME, PRIORITY.AUTONOMOUS)) {
       this.movement.walkTo(this.desktop.homeX);
     }
@@ -104,16 +117,37 @@ export class CharacterController {
     }
   }
 
-  jumpTo(desktopX) {
-    if (this.state.transition(STATE.JUMPING, PRIORITY.AUTONOMOUS)) {
-      this.movement.walkTo(desktopX);
-      this.movement.jump();
-    }
-  }
-
   sit() {
     this.movement.stop();
     this.state.transition(STATE.SITTING, PRIORITY.USER_COMMAND);
+  }
+
+  /**
+   * Sit on top edge of a desktop window.
+   */
+  async sitOnWindow(windowId = null) {
+    let win = null;
+    if (windowId) {
+      win = this.windowManager.windows.find(w => w.id === windowId);
+    }
+    if (!win) {
+      win = this.windowManager.activeWindow || this.windowManager.windows[0];
+    }
+
+    if (!win) {
+      this.sit(); // Fallback to ground sitting if no window
+      return false;
+    }
+
+    this._currentWindowAnchor = win;
+    // Walk to window center
+    this.walkTo(win.platformX);
+    await this.waitForArrival(8000);
+
+    // Transition to sitting on top edge
+    this.sit();
+    this.expression.setEmotion('happy');
+    return true;
   }
 
   sleep() {
@@ -158,11 +192,8 @@ export class CharacterController {
     this.state.transition(STATE.IDLE, PRIORITY.USER_COMMAND);
   }
 
-  speak(text) {
-    try { this.vrm.setExpression('aa', 0.5); } catch (e) {}
-    setTimeout(() => {
-      try { this.vrm.setExpression('aa', 0); } catch (e) {}
-    }, 2000);
+  speak(text, durationMs = null) {
+    this.voice.speak(text, durationMs);
   }
 
   pet() {
@@ -178,7 +209,7 @@ export class CharacterController {
     }, 2500);
   }
 
-  // === MAIN UPDATE LOOP ===
+  // === MAIN UPDATE LOOP (Called once from renderer.js animate) ===
 
   update(delta) {
     if (!this._loaded) return;
@@ -188,7 +219,7 @@ export class CharacterController {
       // 1. Natural autonomous lookAt update (glancing around)
       this.lookAt.update(dt);
 
-      // 4. Follow mouse mode
+      // 2. Follow mouse mode (if explicitly enabled)
       if (this._mouseMode === 'FOLLOW') {
         const dx = this.mouse.x - this.movement.desktopX;
         if (Math.abs(dx) > CONFIG.mouse.followDeadZone) {
@@ -199,10 +230,10 @@ export class CharacterController {
         }
       }
 
-      // 5. Movement update
+      // 3. Movement update
       this.movement.update(dt);
 
-      // 6. Auto-transitions
+      // 4. Auto-transitions
       const st = this.state.state;
       if (st === STATE.WALKING && !this.movement.isMoving) {
         this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
@@ -218,10 +249,10 @@ export class CharacterController {
         }, 400);
       }
 
-      // 7. Animation update
+      // 5. Animation update
       this.animation.update(dt);
 
-      // 8. VRM update (spring bones etc)
+      // 6. VRM update (spring bones etc)
       this.vrm.update(dt);
     } catch (e) {
       console.error('[AO] Update error:', e);
@@ -259,33 +290,17 @@ export class CharacterController {
     } catch (e) { /* safe */ }
   }
 
-  // === Brain command interface ===
+  // === Brain semantic command dispatcher ===
   executeCommand(cmd) {
-    try {
-      switch (cmd.action) {
-        case 'character.idle': this.idle(); break;
-        case 'character.walk_to': this.walkTo(cmd.x); break;
-        case 'character.jump': this.jump(); break;
-        case 'character.sit': this.sit(); break;
-        case 'character.sleep': this.sleep(); break;
-        case 'character.wake': this.wake(); break;
-        case 'character.go_home': this.goHome(); break;
-        case 'character.rest': this.rest(); break;
-        case 'character.follow_mouse': this.followMouse(); break;
-        case 'character.stop': this.stopAction(); break;
-        case 'character.emotion': this.setEmotion(cmd.name); break;
-        case 'character.animation': this.playAnimation(cmd.name); break;
-        case 'character.speak': this.speak(cmd.text); break;
-        default: return { success: false, error: 'Unknown command' };
-      }
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    return this.bridge._executeSemanticCommand(cmd);
   }
 
   dispose() {
     try {
+      this.bridge.dispose();
+      this.windowManager.dispose();
+      this.creatures.dispose();
+      this.voice.dispose();
       this.idleBehavior.dispose();
       this.mouse.dispose();
       this.lookAt.dispose();

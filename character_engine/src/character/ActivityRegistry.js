@@ -1,5 +1,6 @@
 import { CONFIG } from '../config.js';
 import { STATE, PRIORITY } from './CharacterState.js';
+import { UtilitySelector } from '../mind/UtilitySelector.js';
 
 /**
  * ActivityRegistry — manages logical human-like activities for Ao.
@@ -215,15 +216,16 @@ export class ActivityRegistry {
     this._currentActivity = null;
     this._activityTimeout = null;
     this._aborted = false;
+    this._utility = new UtilitySelector();
   }
 
   get currentActivity() { return this._currentActivity; }
   get isActive() { return this._currentActivity !== null; }
 
   /**
-   * Pick suitable activity based on emotions, cooldowns, and time of day.
+   * Pick suitable activity based on Utility AI scoring and cooldowns.
    */
-  pickActivity(emotionalState, dayNight) {
+  pickActivity(emotionalState, dayNight, context = {}) {
     const now = Date.now();
     const candidates = this._activities.filter(a => {
       if (now - a.lastRun < a.cooldownMs) return false;
@@ -232,12 +234,13 @@ export class ActivityRegistry {
 
     if (candidates.length === 0) return null;
 
-    // Sort by priority descending
-    candidates.sort((a, b) => b.priority - a.priority);
+    // Use mathematical Utility AI evaluation
+    const selected = this._utility.evaluate(candidates, emotionalState, {
+      isNight: dayNight?.isNight,
+      activeAppCategory: context.activeAppCategory,
+    });
 
-    // Pick from top candidates
-    const topPool = candidates.slice(0, 2);
-    return topPool[Math.floor(Math.random() * topPool.length)];
+    return selected || candidates[0];
   }
 
   /**
