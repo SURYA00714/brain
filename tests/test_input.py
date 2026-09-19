@@ -22,11 +22,8 @@ from brain import parse_model_action, run_planner_task
 
 
 def make_mock_response(text):
-    mock = MagicMock()
-    mock.status_code = 200
-    mock.raise_for_status.return_value = None
-    mock.json.return_value = {"response": text}
-    return mock
+    from models.gateway import ModelResponse
+    return ModelResponse(text=text, model="mock", provider="mock", success=True)
 
 
 class TestComputerInteraction(unittest.TestCase):
@@ -137,7 +134,7 @@ class TestComputerInteraction(unittest.TestCase):
         self.assertIn("not registered", res["error"])
 
     # 12. Planner can request SCREENSHOT test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_screenshot_request(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "SCREENSHOT", "arguments": {}}'),
@@ -149,7 +146,7 @@ class TestComputerInteraction(unittest.TestCase):
         self.mock_screen.assert_called_once()
 
     # 13. Planner can request TYPE_TEXT test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_type_text_request(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "TYPE_TEXT", "arguments": {"text": "Python tutorials"}}'),
@@ -160,7 +157,7 @@ class TestComputerInteraction(unittest.TestCase):
         self.assertEqual(res, "Typed text.")
 
     # 14. Planner can request PRESS_KEY test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_press_key_request(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "PRESS_KEY", "arguments": {"key": "enter"}}'),
@@ -171,7 +168,7 @@ class TestComputerInteraction(unittest.TestCase):
         self.assertEqual(res, "Pressed enter.")
 
     # 15. Multi-step sequence test (OPEN_APP -> SCREENSHOT -> TYPE_TEXT -> PRESS_KEY -> SCREENSHOT -> final)
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_multistep_sequence(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "OPEN_APP", "arguments": {"app_name": "brave"}}'),

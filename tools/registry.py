@@ -1,13 +1,36 @@
 from tools.apps import open_app, close_app, focus_app, APPROVED_APPS
+from tools.app_launcher import launch_app, list_apps
+from tools.system_control import (
+    volume_up, volume_down, volume_mute,
+    brightness_up, brightness_down, lock_screen,
+    wifi_status, wifi_on, wifi_off,
+    bluetooth_status, bluetooth_on, bluetooth_off,
+    get_system_info, memory_status, disk_status, cpu_status,
+    shutdown, restart, suspend, logout
+)
+from tools.window_manager import (
+    list_windows, focus_window, minimize_window, maximize_window,
+    restore_window, close_window, move_window, resize_window
+)
 from tools.search import perform_web_search
-from tools.files import list_files, find_files, read_text_file, create_folder
-from tools.screen import capture_screen, analyze_captured_screen
+from tools.files import (
+    list_files, find_files, read_text_file, create_folder,
+    create_file, copy_file, move_file, rename_file, file_info, delete_file
+)
+from tools.screen import capture_screen, analyze_captured_screen, ocr_screen, capture_screen_region
 from tools.vision import default_vision
-from tools.browser import browser_search, browser_navigate, browser_search_foreground, click_first_search_result, browser_new_tab
+from tools.browser import (
+    browser_search, browser_navigate, browser_search_foreground, click_first_search_result,
+    browser_new_tab, browser_download, browser_open, browser_back, browser_forward,
+    browser_reload, browser_title, browser_url, browser_find_text, browser_extract_text,
+    browser_click, browser_fill, browser_press, browser_select, browser_scroll_page,
+    browser_wait, browser_close_tab, browser_switch_tab, browser_list_tabs
+)
 from tools.time_tool import get_current_time
 from tools.input import (
     move_mouse, click_mouse, double_click, scroll,
     type_text, press_key, hotkey, click_element, type_in_element,
+    right_click, get_screen_size, get_active_window,
     default_chain_tracker
 )
 
@@ -106,12 +129,42 @@ class ToolRegistry:
             if tool.name == "OPEN_APP":
                 app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
                 result = tool.func(app_name)
+            elif tool.name == "LIST_APPS":
+                result = tool.func()
             elif tool.name == "CLOSE_APP":
                 app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
                 result = tool.func(app_name)
             elif tool.name == "FOCUS_APP":
                 app_name = arguments.get("app_name") or arguments.get("app") or arguments.get("name") or ""
                 result = tool.func(app_name)
+            elif tool.name == "LIST_WINDOWS":
+                result = tool.func()
+            elif tool.name == "FOCUS_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or arguments.get("name") or ""
+                result = tool.func(target)
+            elif tool.name == "MINIMIZE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or arguments.get("name") or ""
+                result = tool.func(target)
+            elif tool.name == "MAXIMIZE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or arguments.get("name") or ""
+                result = tool.func(target)
+            elif tool.name == "RESTORE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or arguments.get("name") or ""
+                result = tool.func(target)
+            elif tool.name == "CLOSE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or arguments.get("name") or ""
+                conf = arguments.get("confirmed", False)
+                result = tool.func(target, confirmed=conf)
+            elif tool.name == "MOVE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or ""
+                x = arguments.get("x", 0)
+                y = arguments.get("y", 0)
+                result = tool.func(target, x, y)
+            elif tool.name == "RESIZE_WINDOW":
+                target = arguments.get("target") or arguments.get("window") or ""
+                w = arguments.get("width", 800)
+                h = arguments.get("height", 600)
+                result = tool.func(target, w, h)
             elif tool.name == "BROWSER_SEARCH":
                 query = arguments.get("query") or arguments.get("keywords") or ""
                 mode = arguments.get("mode", "AUTO")
@@ -120,13 +173,60 @@ class ToolRegistry:
                 url = arguments.get("url") or arguments.get("link") or ""
                 mode = arguments.get("mode", "AUTO")
                 result = tool.func(url, mode=mode)
+            elif tool.name == "BROWSER_OPEN":
+                url = arguments.get("url") or ""
+                result = tool.func(url=url)
+            elif tool.name == "BROWSER_BACK":
+                result = tool.func()
+            elif tool.name == "BROWSER_FORWARD":
+                result = tool.func()
+            elif tool.name == "BROWSER_RELOAD":
+                result = tool.func()
+            elif tool.name == "BROWSER_TITLE":
+                result = tool.func()
+            elif tool.name == "BROWSER_URL":
+                result = tool.func()
+            elif tool.name == "BROWSER_FIND_TEXT":
+                text = arguments.get("text") or arguments.get("query") or ""
+                result = tool.func(text)
+            elif tool.name == "BROWSER_EXTRACT_TEXT":
+                sel = arguments.get("selector", "body")
+                result = tool.func(selector=sel)
+            elif tool.name == "BROWSER_CLICK":
+                sel = arguments.get("selector") or arguments.get("target") or ""
+                result = tool.func(sel)
+            elif tool.name == "BROWSER_FILL":
+                sel = arguments.get("selector") or arguments.get("target") or ""
+                text = arguments.get("text") or ""
+                result = tool.func(sel, text)
+            elif tool.name == "BROWSER_PRESS":
+                key = arguments.get("key") or ""
+                result = tool.func(key)
+            elif tool.name == "BROWSER_SELECT":
+                sel = arguments.get("selector") or ""
+                opt = arguments.get("option") or ""
+                result = tool.func(sel, opt)
+            elif tool.name == "BROWSER_SCROLL":
+                dir_str = arguments.get("direction", "down")
+                amt = arguments.get("amount", 500)
+                result = tool.func(direction=dir_str, amount=amt)
+            elif tool.name == "BROWSER_WAIT":
+                sec = arguments.get("seconds", 1.0)
+                result = tool.func(seconds=sec)
+            elif tool.name == "BROWSER_CLOSE_TAB":
+                result = tool.func()
+            elif tool.name == "BROWSER_SWITCH_TAB":
+                idx = arguments.get("tab_index", 1)
+                result = tool.func(tab_index=idx)
+            elif tool.name == "BROWSER_LIST_TABS":
+                result = tool.func()
             elif tool.name == "WEB_SEARCH":
                 query = arguments.get("query") or arguments.get("keywords") or ""
                 result = tool.func(query)
-            elif tool.name == "LIST_FILES":
+            elif tool.name in ("LIST_FILES", "LIST_DIRECTORY"):
                 path = arguments.get("target_path") or arguments.get("path") or arguments.get("location") or "Brain"
                 result = tool.func(path)
-            elif tool.name == "FIND_FILES":
+            elif tool.name in ("FIND_FILES", "SEARCH_FILES"):
                 pattern = arguments.get("pattern") or arguments.get("query") or "*.py"
                 root = arguments.get("search_root") or arguments.get("location") or "Brain"
                 result = tool.func(pattern, root)
@@ -137,6 +237,32 @@ class ToolRegistry:
                 folder_name = arguments.get("folder_name") or arguments.get("name") or ""
                 parent_root = arguments.get("parent_root") or arguments.get("parent") or arguments.get("location") or "Downloads"
                 result = tool.func(folder_name, parent_root)
+            elif tool.name == "CREATE_FILE":
+                file_name = arguments.get("file_name") or arguments.get("name") or ""
+                parent_root = arguments.get("parent_root") or arguments.get("location") or "Downloads"
+                result = tool.func(file_name, parent_root=parent_root)
+            elif tool.name == "COPY_FILE":
+                src = arguments.get("source") or arguments.get("src") or ""
+                dst = arguments.get("destination") or arguments.get("dst") or ""
+                conf = arguments.get("confirmed", False)
+                result = tool.func(src, dst, confirmed=conf)
+            elif tool.name == "MOVE_FILE":
+                src = arguments.get("source") or arguments.get("src") or ""
+                dst = arguments.get("destination") or arguments.get("dst") or ""
+                conf = arguments.get("confirmed", False)
+                result = tool.func(src, dst, confirmed=conf)
+            elif tool.name == "RENAME_FILE":
+                src = arguments.get("source") or arguments.get("src") or ""
+                new_name = arguments.get("new_name") or arguments.get("name") or ""
+                conf = arguments.get("confirmed", False)
+                result = tool.func(src, new_name, confirmed=conf)
+            elif tool.name == "FILE_INFO":
+                tpath = arguments.get("target_path") or arguments.get("path") or ""
+                result = tool.func(tpath)
+            elif tool.name == "DELETE_FILE":
+                tpath = arguments.get("target_path") or arguments.get("path") or ""
+                conf = arguments.get("confirmed", False)
+                result = tool.func(tpath, confirmed=conf)
             elif tool.name == "SCREENSHOT":
                 result = tool.func()
             elif tool.name == "TIME":
@@ -150,10 +276,26 @@ class ToolRegistry:
                 y = arguments.get("y", 0)
                 btn = arguments.get("button", "left")
                 result = tool.func(x, y, btn)
+            elif tool.name == "RIGHT_CLICK":
+                x = arguments.get("x", 0)
+                y = arguments.get("y", 0)
+                result = tool.func(x, y)
             elif tool.name == "DOUBLE_CLICK":
                 x = arguments.get("x", 0)
                 y = arguments.get("y", 0)
                 result = tool.func(x, y)
+            elif tool.name == "SCREEN_SIZE":
+                result = tool.func()
+            elif tool.name == "ACTIVE_WINDOW":
+                result = tool.func()
+            elif tool.name == "OCR_SCREEN":
+                result = tool.func()
+            elif tool.name == "SCREEN_REGION":
+                x = arguments.get("x", 0)
+                y = arguments.get("y", 0)
+                w = arguments.get("width", 100)
+                h = arguments.get("height", 100)
+                result = tool.func(x, y, w, h)
             elif tool.name == "SCROLL":
                 amount = arguments.get("amount", 0)
                 result = tool.func(amount)
@@ -210,13 +352,16 @@ class ToolRegistry:
                     status_str = explicit_status or "executed_unverified"
                     err_msg = None
 
-                return {
+                res_dict = {
                     "success": is_success,
                     "status": status_str,
                     "tool": tool.name,
                     "data": result.get("data", result),
                     "error": err_msg
                 }
+                if isinstance(result, dict) and "matches" in result:
+                    res_dict["matches"] = result["matches"]
+                return res_dict
 
             if isinstance(result, str) and (result.startswith("Error:") or result.startswith("Access Denied:") or result.startswith("Safety Block:") or result.startswith("Brain Error:") or result.startswith("Memory Error:")):
                 return {
@@ -252,11 +397,51 @@ default_registry = ToolRegistry()
 # Register Phase 1-3 Tools
 default_registry.register(Tool(
     name="OPEN_APP",
-    description="Launches an approved desktop application (brave, terminal, file_manager, text_editor).",
-    parameters={"app_name": "string (brave | terminal | file_manager | text_editor)"},
+    description="Launches an installed GUI application by name (e.g. Firefox, Brave, Calculator).",
+    parameters={"name": "string"},
     risk_level="MEDIUM",
-    func=open_app
+    func=launch_app
 ))
+
+default_registry.register(Tool(
+    name="LIST_APPS",
+    description="Lists installed GUI applications on the system.",
+    parameters={},
+    risk_level="LOW",
+    func=list_apps
+))
+
+# Register System Control Tools
+default_registry.register(Tool("VOLUME_UP", "Increases master audio volume.", {"step_percent": "integer (default: 5)"}, "LOW", volume_up))
+default_registry.register(Tool("VOLUME_DOWN", "Decreases master audio volume.", {"step_percent": "integer (default: 5)"}, "LOW", volume_down))
+default_registry.register(Tool("VOLUME_MUTE", "Toggles master audio mute.", {}, "LOW", volume_mute))
+default_registry.register(Tool("BRIGHTNESS_UP", "Increases display brightness.", {"step_percent": "integer (default: 10)"}, "LOW", brightness_up))
+default_registry.register(Tool("BRIGHTNESS_DOWN", "Decreases display brightness.", {"step_percent": "integer (default: 10)"}, "LOW", brightness_down))
+default_registry.register(Tool("LOCK_SCREEN", "Locks the desktop screen.", {}, "LOW", lock_screen))
+default_registry.register(Tool("WIFI_STATUS", "Returns Wi-Fi radio status.", {}, "LOW", wifi_status))
+default_registry.register(Tool("WIFI_ON", "Enables Wi-Fi adapter.", {}, "MEDIUM", wifi_on))
+default_registry.register(Tool("WIFI_OFF", "Disables Wi-Fi adapter.", {}, "MEDIUM", wifi_off))
+default_registry.register(Tool("BLUETOOTH_STATUS", "Returns Bluetooth radio status.", {}, "LOW", bluetooth_status))
+default_registry.register(Tool("BLUETOOTH_ON", "Enables Bluetooth adapter.", {}, "MEDIUM", bluetooth_on))
+default_registry.register(Tool("BLUETOOTH_OFF", "Disables Bluetooth adapter.", {}, "MEDIUM", bluetooth_off))
+default_registry.register(Tool("SYSTEM_INFO", "Returns OS distro, kernel, and machine architecture info.", {}, "LOW", get_system_info))
+default_registry.register(Tool("MEMORY_STATUS", "Returns RAM usage metrics.", {}, "LOW", memory_status))
+default_registry.register(Tool("DISK_STATUS", "Returns filesystem disk space metrics.", {"target_path": "string (default: /)"}, "LOW", disk_status))
+default_registry.register(Tool("CPU_STATUS", "Returns CPU core count and utilization percentage.", {}, "LOW", cpu_status))
+default_registry.register(Tool("SHUTDOWN", "Triggers system power off (Confirmation Gated).", {"confirmed": "boolean"}, "HIGH", shutdown))
+default_registry.register(Tool("RESTART", "Triggers system reboot (Confirmation Gated).", {"confirmed": "boolean"}, "HIGH", restart))
+default_registry.register(Tool("SUSPEND", "Triggers system suspend/sleep (Confirmation Gated).", {"confirmed": "boolean"}, "HIGH", suspend))
+default_registry.register(Tool("LOGOUT", "Triggers desktop session logout (Confirmation Gated).", {"confirmed": "boolean"}, "HIGH", logout))
+
+# Register Phase 2 Window Management Tools
+default_registry.register(Tool("LIST_WINDOWS", "Lists open desktop application windows.", {}, "LOW", list_windows))
+default_registry.register(Tool("FOCUS_WINDOW", "Focuses an open window by ID or title.", {"target": "string"}, "LOW", focus_window))
+default_registry.register(Tool("MINIMIZE_WINDOW", "Minimizes a window by ID or title.", {"target": "string"}, "LOW", minimize_window))
+default_registry.register(Tool("MAXIMIZE_WINDOW", "Maximizes a window by ID or title.", {"target": "string"}, "LOW", maximize_window))
+default_registry.register(Tool("RESTORE_WINDOW", "Restores a window to unmaximized state by ID or title.", {"target": "string"}, "LOW", restore_window))
+default_registry.register(Tool("CLOSE_WINDOW", "Closes a window by ID or title (Confirmation Gated).", {"target": "string", "confirmed": "boolean"}, "MEDIUM", close_window))
+default_registry.register(Tool("MOVE_WINDOW", "Moves a window to (x, y) screen coordinates.", {"target": "string", "x": "integer", "y": "integer"}, "LOW", move_window))
+default_registry.register(Tool("RESIZE_WINDOW", "Resizes a window to width x height dimensions.", {"target": "string", "width": "integer", "height": "integer"}, "LOW", resize_window))
 
 default_registry.register(Tool(
     name="WEB_SEARCH",
@@ -296,6 +481,70 @@ default_registry.register(Tool(
     parameters={"folder_name": "string", "parent_root": "string (default: Downloads)"},
     risk_level="MEDIUM",
     func=create_folder
+))
+
+default_registry.register(Tool(
+    name="LIST_DIRECTORY",
+    description="Lists files and subdirectories in a directory path inside safe directories.",
+    parameters={"target_path": "string"},
+    risk_level="LOW",
+    func=list_files
+))
+
+default_registry.register(Tool(
+    name="CREATE_FILE",
+    description="Creates a new empty file inside safe directories.",
+    parameters={"file_name": "string", "parent_root": "string (default: Downloads)"},
+    risk_level="MEDIUM",
+    func=create_file
+))
+
+default_registry.register(Tool(
+    name="COPY_FILE",
+    description="Copies a file or directory from source to destination inside safe directories.",
+    parameters={"source": "string", "destination": "string"},
+    risk_level="MEDIUM",
+    func=copy_file
+))
+
+default_registry.register(Tool(
+    name="MOVE_FILE",
+    description="Moves a file or directory from source to destination inside safe directories.",
+    parameters={"source": "string", "destination": "string"},
+    risk_level="MEDIUM",
+    func=move_file
+))
+
+default_registry.register(Tool(
+    name="RENAME_FILE",
+    description="Renames a file or directory inside safe directories.",
+    parameters={"source": "string", "new_name": "string"},
+    risk_level="MEDIUM",
+    func=rename_file
+))
+
+default_registry.register(Tool(
+    name="SEARCH_FILES",
+    description="Searches for files matching a pattern inside safe root directories.",
+    parameters={"pattern": "string", "search_root": "string"},
+    risk_level="LOW",
+    func=find_files
+))
+
+default_registry.register(Tool(
+    name="FILE_INFO",
+    description="Inspects file metadata (size, modification time, permissions).",
+    parameters={"target_path": "string"},
+    risk_level="LOW",
+    func=file_info
+))
+
+default_registry.register(Tool(
+    name="DELETE_FILE",
+    description="Deletes a file or directory inside safe directories (Confirmation Gated).",
+    parameters={"target_path": "string", "confirmed": "boolean"},
+    risk_level="HIGH",
+    func=delete_file
 ))
 
 # Register Phase 5 Desktop Interaction Tools
@@ -363,6 +612,13 @@ default_registry.register(Tool(
     func=hotkey
 ))
 
+# Phase 5 Desktop Control & Observation Tools
+default_registry.register(Tool("RIGHT_CLICK", "Right-clicks the mouse at (x, y) coordinates.", {"x": "integer", "y": "integer"}, "MEDIUM", right_click))
+default_registry.register(Tool("SCREEN_SIZE", "Returns desktop screen width and height.", {}, "LOW", get_screen_size))
+default_registry.register(Tool("ACTIVE_WINDOW", "Returns active window title, class, and geometry.", {}, "LOW", get_active_window))
+default_registry.register(Tool("OCR_SCREEN", "Runs on-demand OCR text extraction on desktop screen.", {}, "LOW", ocr_screen))
+default_registry.register(Tool("SCREEN_REGION", "Captures a rectangular region of the screen.", {"x": "integer", "y": "integer", "width": "integer", "height": "integer"}, "LOW", capture_screen_region))
+
 # Register Phase 6 Vision & Element Interaction Tools
 default_registry.register(Tool(
     name="ANALYZE_SCREEN",
@@ -428,6 +684,34 @@ default_registry.register(Tool(
     parameters={"url": "string"},
     risk_level="LOW",
     func=browser_navigate
+))
+
+# Phase 4 Deterministic Browser Control Tools
+default_registry.register(Tool("BROWSER_OPEN", "Opens browser to a URL or default start page.", {"url": "string"}, "LOW", browser_open))
+default_registry.register(Tool("BROWSER_BACK", "Navigates back one page in browser history.", {}, "LOW", browser_back))
+default_registry.register(Tool("BROWSER_FORWARD", "Navigates forward one page in browser history.", {}, "LOW", browser_forward))
+default_registry.register(Tool("BROWSER_RELOAD", "Reloads current browser page.", {}, "LOW", browser_reload))
+default_registry.register(Tool("BROWSER_TITLE", "Gets current browser page title.", {}, "LOW", browser_title))
+default_registry.register(Tool("BROWSER_URL", "Gets current browser page URL.", {}, "LOW", browser_url))
+default_registry.register(Tool("BROWSER_FIND_TEXT", "Finds text on active browser page.", {"text": "string"}, "LOW", browser_find_text))
+default_registry.register(Tool("BROWSER_EXTRACT_TEXT", "Extracts structured text from browser DOM or element.", {"selector": "string"}, "LOW", browser_extract_text))
+default_registry.register(Tool("BROWSER_CLICK", "Clicks a DOM element or button by selector.", {"selector": "string"}, "MEDIUM", browser_click))
+default_registry.register(Tool("BROWSER_FILL", "Fills text into a DOM input element by selector.", {"selector": "string", "text": "string"}, "MEDIUM", browser_fill))
+default_registry.register(Tool("BROWSER_PRESS", "Presses a key in active browser.", {"key": "string"}, "MEDIUM", browser_press))
+default_registry.register(Tool("BROWSER_SELECT", "Selects an option from a dropdown element.", {"selector": "string", "option": "string"}, "LOW", browser_select))
+default_registry.register(Tool("BROWSER_SCROLL", "Scrolls active browser page up or down.", {"direction": "string", "amount": "integer"}, "LOW", browser_scroll_page))
+default_registry.register(Tool("BROWSER_WAIT", "Waits for page load or element readiness (0.1 to 10s).", {"seconds": "number"}, "LOW", browser_wait))
+default_registry.register(Tool("BROWSER_CLOSE_TAB", "Closes active browser tab.", {}, "LOW", browser_close_tab))
+default_registry.register(Tool("BROWSER_SWITCH_TAB", "Switches to browser tab by index (1..9).", {"tab_index": "integer"}, "LOW", browser_switch_tab))
+default_registry.register(Tool("BROWSER_LIST_TABS", "Lists open browser tabs.", {}, "LOW", browser_list_tabs))
+
+from tools.browser import browser_download
+default_registry.register(Tool(
+    name="BROWSER_DOWNLOAD",
+    description="Capability tool for controlled browser downloads via Playwright.",
+    parameters={"url": "string", "destination": "string (optional)"},
+    risk_level="LOW",
+    func=browser_download
 ))
 
 default_registry.register(Tool(

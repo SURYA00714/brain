@@ -280,12 +280,31 @@ class AgentLoop:
             else:
                 step.status = "FAILED"
                 default_companion_state.set_state(activity=CompanionActivity.ERROR, verification="FAILED")
-                if not step.allow_failure:
+                
+                # Bounded adaptive recovery pass via AdaptiveRecoveryManager
+                from core.recovery import default_recovery_manager
+                diag_reason, diag_exp = default_recovery_manager.diagnose_failure(tool_name, args, res, perception=post_obs)
+                rec = default_recovery_manager.determine_recovery_strategy(tool_name, args, diag_reason, attempt=step.retry_count, perception=post_obs, goal_id=plan.goal)
+                
+                if rec.get("action") == "SWITCH_METHOD" and rec.get("recommended_tool"):
+                    alt_tool = rec.get("recommended_tool")
+                    collected_evidence.append(f"{tool_name} failed ({diag_exp}). Recovery: Switching method to {alt_tool}")
+                    if self.registry.has_tool(alt_tool):
+                        alt_res = self.registry.execute(alt_tool, args)
+                        if alt_res.get("success"):
+                            step.status = "COMPLETED"
+                            step.result = alt_res
+                            verified = True
+                            collected_evidence.append(f"{alt_tool}: Alternative method succeeded.")
+                            default_world_state.record_action_outcome(alt_tool, args, alt_res, verified=True, verification_status="CONFIRMED")
+                            default_companion_state.set_state(activity=CompanionActivity.SUCCESS, verification="CONFIRMED")
+
+                if not verified and not step.allow_failure:
                     plan.status = "FAILED"
                     return {
                         "success": False,
                         "status": "FAILED",
-                        "answer": f"Action '{tool_name}' did not produce the expected evidence.",
+                        "answer": f"Action '{tool_name}' did not produce expected evidence: {diag_exp}",
                         "evidence": collected_evidence
                     }
 

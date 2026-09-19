@@ -12,6 +12,7 @@ except ImportError:
         HAS_MSS = True
     except ImportError:
         HAS_MSS = False
+        mss = None
 
 try:
     import pyautogui
@@ -244,6 +245,48 @@ def analyze_captured_screen(image_path=None, force_refresh=False):
     res["screen_state"] = perc.screen_state
     res["error"] = None
     return res
+
+
+def ocr_screen() -> dict:
+    """Runs on-demand OCR text extraction on current screen."""
+    obs = analyze_captured_screen(force_refresh=True)
+    perc = obs.get("perception", {}) if isinstance(obs, dict) else {}
+    texts = perc.get("detected_text", []) or []
+    return {
+        "success": True,
+        "tool": "OCR_SCREEN",
+        "detected_texts": texts,
+        "count": len(texts),
+        "data": f"OCR extracted {len(texts)} text block(s) from screen."
+    }
+
+
+def capture_screen_region(x: int, y: int, width: int, height: int, output_path=None) -> dict:
+    """Captures a bounded rectangular region of the desktop screen."""
+    if not (isinstance(x, int) and isinstance(y, int) and isinstance(width, int) and isinstance(height, int)):
+        return {"success": False, "tool": "SCREEN_REGION", "error": "Invalid region parameters (x, y, width, height must be integers)."}
+
+    cap_res = capture_screen(output_path=output_path)
+    if not cap_res.get("success"):
+        return cap_res
+
+    img_path = cap_res.get("image_path")
+    if img_path and Path(img_path).exists():
+        try:
+            from PIL import Image
+            img = Image.open(img_path)
+            cropped = img.crop((x, y, x + width, y + height))
+            cropped.save(img_path)
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "tool": "SCREEN_REGION",
+        "image_path": img_path,
+        "region": {"x": x, "y": y, "width": width, "height": height},
+        "data": f"Screen region ({width}x{height} at {x},{y}) captured."
+    }
 
 
 

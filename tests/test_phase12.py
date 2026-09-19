@@ -1,3 +1,4 @@
+from models.gateway import ModelResponse
 import os
 import time
 import unittest

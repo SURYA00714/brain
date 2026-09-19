@@ -1,6 +1,7 @@
 import os
 import re
 from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 # Explicit approved safe roots
 SAFE_ROOTS = [
@@ -235,3 +236,192 @@ def create_folder(folder_name, parent_root="Downloads", safe_roots=None):
         return f"Folder '{clean_name}' created successfully in '{validated_parent.name}'."
     except Exception as e:
         return f"Error creating folder '{clean_name}': {str(e)}"
+
+
+# -------------------------------------------------------------------
+# Phase 3 Deterministic Safe Filesystem Operations
+# -------------------------------------------------------------------
+
+def create_file(file_name: str, parent_root: str = "Downloads", safe_roots=None) -> Dict[str, Any]:
+    """Creates a new empty file inside an approved safe root directory."""
+    if not file_name or not file_name.strip():
+        return {"success": False, "tool": "CREATE_FILE", "error": "File name cannot be empty."}
+
+    clean_name = file_name.strip().strip("/\\")
+    if ".." in clean_name or "/" in clean_name or "\\" in clean_name:
+        return {"success": False, "tool": "CREATE_FILE", "error": "Path traversal characters not allowed in file name."}
+
+    candidate_parent = resolve_location_alias(parent_root)
+    validated_parent, err = validate_safe_path(candidate_parent, safe_roots=safe_roots)
+    if err or not validated_parent:
+        return {"success": False, "tool": "CREATE_FILE", "error": err or "Access Denied."}
+
+    target_file = validated_parent / clean_name
+    validated_target, err = validate_safe_path(target_file, safe_roots=safe_roots, allow_nonexistent=True)
+    if err or not validated_target:
+        return {"success": False, "tool": "CREATE_FILE", "error": err or "Access Denied."}
+
+    try:
+        validated_target.touch(exist_ok=True)
+        return {"success": True, "tool": "CREATE_FILE", "data": f"Empty file '{clean_name}' created at {validated_target}."}
+    except Exception as e:
+        return {"success": False, "tool": "CREATE_FILE", "error": f"Failed to create file '{clean_name}': {str(e)}"}
+
+
+def copy_file(source: str, destination: str, confirmed: bool = False, safe_roots=None) -> Dict[str, Any]:
+    """Copies a file from source path to destination path inside safe directories."""
+    import shutil
+    if not source or not destination:
+        return {"success": False, "tool": "COPY_FILE", "error": "Source and destination paths are required."}
+
+    cand_src = resolve_location_alias(source)
+    val_src, err_src = validate_safe_path(cand_src, safe_roots=safe_roots)
+    if err_src or not val_src:
+        return {"success": False, "tool": "COPY_FILE", "error": err_src or "Source Access Denied."}
+
+    if not val_src.exists():
+        return {"success": False, "tool": "COPY_FILE", "error": f"Source file '{source}' does not exist."}
+
+    cand_dst = resolve_location_alias(destination)
+    if cand_dst.is_dir() or destination.endswith("/") or destination.endswith("\\"):
+        cand_dst = cand_dst / val_src.name
+
+    val_dst, err_dst = validate_safe_path(cand_dst, safe_roots=safe_roots, allow_nonexistent=True)
+    if err_dst or not val_dst:
+        return {"success": False, "tool": "COPY_FILE", "error": err_dst or "Destination Access Denied."}
+
+    try:
+        if val_src.is_dir():
+            shutil.copytree(val_src, val_dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(val_src, val_dst)
+        return {"success": True, "tool": "COPY_FILE", "data": f"Copied '{val_src.name}' to '{val_dst}'."}
+    except Exception as e:
+        return {"success": False, "tool": "COPY_FILE", "error": f"Copy failed: {str(e)}"}
+
+
+def move_file(source: str, destination: str, confirmed: bool = False, safe_roots=None) -> Dict[str, Any]:
+    """Moves a file or directory inside safe directories."""
+    import shutil
+    if not source or not destination:
+        return {"success": False, "tool": "MOVE_FILE", "error": "Source and destination paths are required."}
+
+    cand_src = resolve_location_alias(source)
+    val_src, err_src = validate_safe_path(cand_src, safe_roots=safe_roots)
+    if err_src or not val_src:
+        return {"success": False, "tool": "MOVE_FILE", "error": err_src or "Source Access Denied."}
+
+    if not val_src.exists():
+        return {"success": False, "tool": "MOVE_FILE", "error": f"Source path '{source}' does not exist."}
+
+    cand_dst = resolve_location_alias(destination)
+    if cand_dst.is_dir():
+        cand_dst = cand_dst / val_src.name
+
+    val_dst, err_dst = validate_safe_path(cand_dst, safe_roots=safe_roots, allow_nonexistent=True)
+    if err_dst or not val_dst:
+        return {"success": False, "tool": "MOVE_FILE", "error": err_dst or "Destination Access Denied."}
+
+    try:
+        shutil.move(str(val_src), str(val_dst))
+        return {"success": True, "tool": "MOVE_FILE", "data": f"Moved '{val_src.name}' to '{val_dst}'."}
+    except Exception as e:
+        return {"success": False, "tool": "MOVE_FILE", "error": f"Move failed: {str(e)}"}
+
+
+def rename_file(source: str, new_name: str, confirmed: bool = False, safe_roots=None) -> Dict[str, Any]:
+    """Renames a file or directory within its safe parent folder."""
+    if not source or not new_name:
+        return {"success": False, "tool": "RENAME_FILE", "error": "Source path and new name are required."}
+
+    clean_new = new_name.strip().strip("/\\")
+    if ".." in clean_new or "/" in clean_new or "\\" in clean_new:
+        return {"success": False, "tool": "RENAME_FILE", "error": "Subdirectory characters not allowed in new name."}
+
+    cand_src = resolve_location_alias(source)
+    val_src, err_src = validate_safe_path(cand_src, safe_roots=safe_roots)
+    if err_src or not val_src:
+        return {"success": False, "tool": "RENAME_FILE", "error": err_src or "Source Access Denied."}
+
+    if not val_src.exists():
+        return {"success": False, "tool": "RENAME_FILE", "error": f"Source '{source}' does not exist."}
+
+    target_path = val_src.parent / clean_new
+    val_target, err_tgt = validate_safe_path(target_path, safe_roots=safe_roots, allow_nonexistent=True)
+    if err_tgt or not val_target:
+        return {"success": False, "tool": "RENAME_FILE", "error": err_tgt or "Target Access Denied."}
+
+    try:
+        val_src.rename(val_target)
+        return {"success": True, "tool": "RENAME_FILE", "data": f"Renamed '{val_src.name}' to '{clean_new}'."}
+    except Exception as e:
+        return {"success": False, "tool": "RENAME_FILE", "error": f"Rename failed: {str(e)}"}
+
+
+def file_info(target_path: str, safe_roots=None) -> Dict[str, Any]:
+    """Inspects file metadata (size, timestamps, permissions, kind)."""
+    if not target_path:
+        return {"success": False, "tool": "FILE_INFO", "error": "Target path is required."}
+
+    cand = resolve_location_alias(target_path)
+    val, err = validate_safe_path(cand, safe_roots=safe_roots)
+    if err or not val:
+        return {"success": False, "tool": "FILE_INFO", "error": err or "Access Denied."}
+
+    if not val.exists():
+        return {"success": False, "tool": "FILE_INFO", "error": f"Path '{target_path}' does not exist."}
+
+    try:
+        st = val.stat()
+        info = {
+            "name": val.name,
+            "path": str(val),
+            "is_dir": val.is_dir(),
+            "size_bytes": st.st_size,
+            "modified": st.st_mtime,
+            "permissions": oct(st.st_mode)[-3:]
+        }
+        kind = "Directory" if val.is_dir() else "File"
+        formatted = f"{kind} '{val.name}': {st.st_size} bytes, modified {st.st_mtime}, mode {oct(st.st_mode)[-3:]}."
+        return {"success": True, "tool": "FILE_INFO", "data": formatted, "info": info}
+    except Exception as e:
+        return {"success": False, "tool": "FILE_INFO", "error": f"Failed to retrieve file info: {str(e)}"}
+
+
+def delete_file(target_path: str, confirmed: bool = False, safe_roots=None) -> Dict[str, Any]:
+    """Deletes a file or folder (Confirmation Gated)."""
+    import shutil
+    if not target_path:
+        return {"success": False, "tool": "DELETE_FILE", "error": "Target path is required."}
+
+    if not confirmed and os.environ.get("BRAIN_MOCK_GUI") != "1":
+        from core.confirmation import default_confirmation_manager
+        status, req = default_confirmation_manager.evaluate_action("DELETE_FILE", {"target_path": target_path})
+        if status == "REQUIRED":
+            return {
+                "success": False,
+                "tool": "DELETE_FILE",
+                "confirmation_required": True,
+                "error": f"Confirmation Required: Deleting '{target_path}' requires explicit user confirmation."
+            }
+
+    cand = resolve_location_alias(target_path)
+    val, err = validate_safe_path(cand, safe_roots=safe_roots)
+    if err or not val:
+        return {"success": False, "tool": "DELETE_FILE", "error": err or "Access Denied."}
+
+    if not val.exists():
+        return {"success": False, "tool": "DELETE_FILE", "error": f"Path '{target_path}' does not exist."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "DELETE_FILE", "data": f"Path '{val.name}' deleted (mocked)."}
+
+    try:
+        if val.is_dir():
+            shutil.rmtree(val)
+        else:
+            val.unlink()
+        return {"success": True, "tool": "DELETE_FILE", "data": f"Deleted '{val.name}' successfully."}
+    except Exception as e:
+        return {"success": False, "tool": "DELETE_FILE", "error": f"Deletion failed: {str(e)}"}
+

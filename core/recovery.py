@@ -1,7 +1,7 @@
 
 
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 from tools.apps import default_app_tracker, focus_app
 from core.perception import default_perception_router, PerceptionResult
@@ -22,8 +22,37 @@ class AdaptiveRecoveryManager:
     Diagnoses the root cause of execution failures and devises bounded,
     state-aware recovery strategies without infinite loops.
     """
-    def __init__(self, max_recovery_attempts: int = 2):
+    def __init__(self, max_recovery_attempts: int = 5):
         self.max_recovery_attempts = max_recovery_attempts
+        self._attempted_methods: Dict[str, List[str]] = {}
+
+    def record_attempted_method(self, goal_id: str, method: str) -> None:
+        """Records an attempted method for a goal to enforce method diversity."""
+        if goal_id not in self._attempted_methods:
+            self._attempted_methods[goal_id] = []
+        if method not in self._attempted_methods[goal_id]:
+            self._attempted_methods[goal_id].append(method)
+
+    def get_attempted_methods(self, goal_id: str) -> List[str]:
+        return list(self._attempted_methods.get(goal_id, []))
+
+    def suggest_alternative_method(self, tool_name: str, goal_id: str = "default") -> Dict[str, Any]:
+        """Suggests an alternate execution method to prevent identical-action loops."""
+        tried = self.get_attempted_methods(goal_id)
+
+        # Hierarchy: DOM/Playwright -> Direct Link / HTTP -> GUI Vision / OCR
+        if tool_name in ("CLICK_FIRST_RESULT", "BROWSER_CLICK"):
+            if "BROWSER_CLICK" in tried or "CLICK_FIRST_RESULT" in tried:
+                if "BROWSER_NAVIGATE" not in tried:
+                    return {"action": "SWITCH_METHOD", "recommended_tool": "BROWSER_NAVIGATE", "message": "Playwright/DOM click failed. Switching to direct BROWSER_NAVIGATE method."}
+                if "ANALYZE_SCREEN" not in tried:
+                    return {"action": "SWITCH_METHOD", "recommended_tool": "ANALYZE_SCREEN", "message": "Direct navigation failed. Switching to GUI Vision / OCR element detection."}
+
+        if tool_name == "BROWSER_SEARCH":
+            if "BROWSER_SEARCH" in tried and "BROWSER_SEARCH_FOREGROUND" not in tried:
+                return {"action": "SWITCH_METHOD", "recommended_tool": "BROWSER_SEARCH_FOREGROUND", "message": "Structured search failed. Switching to foreground GUI browser search."}
+
+        return {"action": "RETRY", "message": f"Retrying with re-evaluated perception for tool '{tool_name}'."}
 
     def diagnose_failure(
         self,
@@ -73,12 +102,15 @@ class AdaptiveRecoveryManager:
         arguments: Dict[str, Any],
         reason_code: str,
         attempt: int,
-        perception: Optional[PerceptionResult] = None
+        perception: Optional[PerceptionResult] = None,
+        goal_id: str = "default"
     ) -> Dict[str, Any]:
         """
         Determines the appropriate bounded recovery action based on diagnostic reason.
         Returns recovery instruction dict: {"action": "RETRY" | "REFOCUS" | "WAIT" | "HALT", ...}
         """
+        self.record_attempted_method(goal_id, tool_name)
+
         if reason_code == "INVALID_TOOL":
             from tools.registry import default_registry
             available_tools = ", ".join(sorted(t["name"] for t in default_registry.list_tools()))
@@ -110,7 +142,6 @@ class AdaptiveRecoveryManager:
             }
 
         if reason_code == "ACTION_IMPOSSIBLE_WITH_AVAILABLE_PERCEPTION":
-            # Invalidate cached perception to force a fresh screen capture and OCR pass
             default_perception_router.invalidate_cache()
             return {
                 "action": "REFRESH_PERCEPTION",
@@ -124,12 +155,10 @@ class AdaptiveRecoveryManager:
                     "delay": 0.2,
                     "message": "Application is loading. Pausing briefly to allow UI to settle before verifying."
                 }
+            return self.suggest_alternative_method(tool_name, goal_id=goal_id)
 
-        # Default bounded retry
-        return {
-            "action": "RETRY",
-            "message": f"Retrying action '{tool_name}' (Attempt {attempt + 1}/{self.max_recovery_attempts})."
-        }
+        # Default bounded retry with alternative suggestion check
+        return self.suggest_alternative_method(tool_name, goal_id=goal_id)
 
 
 default_recovery_manager = AdaptiveRecoveryManager()

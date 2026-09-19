@@ -36,7 +36,7 @@ class PerformanceProfiler:
         self.verification_ms = 0.0
         self.final_response_ms = 0.0
 
-        self.qwen_call_count = 0
+        self.llm_call_count = 0
         self.tool_call_count = 0
         self.gui_action_count = 0
         self.history_char_count = 0
@@ -57,14 +57,14 @@ class PerformanceProfiler:
         self.router_used = True
         self.task_name = f"{route_type}:{tool_name}" if tool_name else route_type
 
-    def record_qwen_call(self, duration_sec, prompt_chars=0):
-        self.qwen_call_count += 1
+    def record_llm_call(self, duration_sec, prompt_chars=0):
+        self.llm_call_count += 1
         self.planner_generation_ms += (duration_sec * 1000.0)
         self.history_char_count = prompt_chars
         self.estimated_prompt_tokens = prompt_chars // 4
 
     def record_llm(self, duration_sec, prompt_chars=0):
-        self.record_qwen_call(duration_sec, prompt_chars)
+        self.record_llm_call(duration_sec, prompt_chars)
 
     def record_tool_call(self, tool_name, duration_sec, is_gui=False):
         self.tool_call_count += 1
@@ -111,7 +111,7 @@ class PerformanceProfiler:
         total_ms = self.get_total_wall_clock_ms()
         return {
             "task_name": self.task_name,
-            "strategy": "FAST_ROUTER" if self.router_used else "QWEN_PLANNER",
+            "strategy": "FAST_ROUTER" if self.router_used else "LLM_PLANNER",
             "router_decision_ms": round(self.router_decision_ms, 2),
             "planner_request_ms": round(self.planner_request_ms, 2),
             "planner_generation_ms": round(self.planner_generation_ms, 2),
@@ -124,17 +124,17 @@ class PerformanceProfiler:
             "verification_ms": round(self.verification_ms, 2),
             "final_response_ms": round(self.final_response_ms, 2),
             "total_wall_clock_ms": round(total_ms, 2),
-            "qwen_call_count": self.qwen_call_count,
+            "llm_call_count": self.llm_call_count,
             "tool_call_count": self.tool_call_count,
             "gui_action_count": self.gui_action_count,
             "estimated_prompt_tokens": self.estimated_prompt_tokens,
             # Backward compatibility aliases
             "total_ms": round(total_ms, 2),
             "router_ms": round(self.router_decision_ms, 2),
-            "qwen_calls": self.qwen_call_count,
+            "llm_calls": self.llm_call_count,
             "tool_calls": self.tool_call_count,
             "gui_actions": self.gui_action_count,
-            "qwen_generation_ms": round(self.planner_generation_ms, 2),
+            "llm_generation_ms": round(self.planner_generation_ms, 2),
             "estimated_tokens": self.estimated_prompt_tokens
         }
 
@@ -144,7 +144,7 @@ class PerformanceProfiler:
             f"[PERF] task=\"{d['task_name']}\"\n"
             f"  strategy={d['strategy']}\n"
             f"  router_decision={d['router_decision_ms']:.2f}ms\n"
-            f"  qwen_generation={d['planner_generation_ms']:.2f}ms (calls={d['qwen_call_count']})\n"
+            f"  llm_generation={d['planner_generation_ms']:.2f}ms (calls={d['llm_call_count']})\n"
             f"  tool_execution={d['tool_execution_ms']:.2f}ms (calls={d['tool_call_count']})\n"
             f"  screenshot={d['screenshot_ms']:.2f}ms | ocr={d['ocr_ms']:.2f}ms | verification={d['verification_ms']:.2f}ms\n"
             f"  TOTAL_WALL_CLOCK={d['total_wall_clock_ms']:.2f}ms"
@@ -154,7 +154,7 @@ class PerformanceProfiler:
         if user_request:
             self.task_name = user_request
         d = self.to_dict()
-        d["intent_route"] = f"FAST_ROUTER:{d['task_name']}" if self.router_used else "QWEN_PLANNER"
+        d["intent_route"] = f"FAST_ROUTER:{d['task_name']}" if self.router_used else "LLM_PLANNER"
         d["total_latency_ms"] = d["total_wall_clock_ms"]
         d["llm_latency_ms"] = d["planner_generation_ms"]
         d["tool_latency_ms"] = d["tool_execution_ms"]

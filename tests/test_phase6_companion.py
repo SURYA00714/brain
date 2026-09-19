@@ -41,7 +41,7 @@ class TestPhase6UnifiedWorldState(unittest.TestCase):
         self.assertIsInstance(snap, WorldState)
         self.assertEqual(snap.observation_status, "UNKNOWN")
         self.assertEqual(snap.last_verification, "UNKNOWN")
-        self.assertEqual(snap.model_provider, "qwen2.5:3b")
+        self.assertEqual(snap.model_provider, "groq")
 
     def test_world_state_to_dict_keys(self):
         d = self.mgr.get_snapshot().to_dict()

@@ -231,7 +231,7 @@ class CognitiveEngine:
         """
         Conducts grounded web research: SEARCH -> COLLECT -> FILTER -> SYNTHESIZE.
         Two-stage: deterministic search first, then fast cloud synthesis if available.
-        Never spends minutes on offline Qwen CPU for standard web research.
+        Never spends minutes on offline CPU for standard web research.
         """
         import re
         # Formulate clean search query
@@ -294,7 +294,7 @@ class CognitiveEngine:
     def process_reasoning_query(self, user_request: str) -> str:
         """
         Processes complex, diagnostic, or open-ended reasoning through the tiered ModelGateway.
-        Uses Cloud reasoning when available, falling back to local Qwen with truthful labeling.
+        Uses Cloud reasoning when available.
         """
         lowered = user_request.lower()
 
@@ -332,7 +332,7 @@ class CognitiveEngine:
                 pass
             if resp.fallback_used:
                 # Honestly inform user of local fallback if cloud failed
-                return f"[Local Qwen fallback]: {out_text}"
+                return f"[Local fallback]: {out_text}"
             return out_text
 
         return f"I was unable to complete the reasoning process ({resp.error or 'Model unavailable'})."

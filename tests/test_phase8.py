@@ -1,3 +1,4 @@
+from models.gateway import ModelResponse
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -46,9 +47,9 @@ class TestPhase8StateAndRecovery(unittest.TestCase):
 
         def mock_post_impl(*args, **kwargs):
             attempt_counter[0] += 1
-            return MagicMock(status_code=200, json=lambda: {"response": f'{{"type": "tool", "tool": "FAIL_TOOL", "arguments": {{"attempt": {attempt_counter[0]}}}}}'})
+            return ModelResponse(model="mock", provider="mock", success=True, text=f'{{"type": "tool", "tool": "FAIL_TOOL", "arguments": {{"attempt": {attempt_counter[0]}}}}}')
 
-        with patch("requests.post", side_effect=mock_post_impl):
+        with patch("brain.default_gateway.generate", side_effect=mock_post_impl):
             ans = run_planner_task("Run failing tool", registry=reg, quiet=True)
             self.assertIn("failed after 3 recovery attempts", ans)
 
@@ -56,11 +57,11 @@ class TestPhase8StateAndRecovery(unittest.TestCase):
         reg = ToolRegistry()
         reg.register(Tool("NO_OP_FAIL", "No op tool", {}, "LOW", lambda: {"success": False, "error": "Failed"}))
 
-        with patch("requests.post") as mock_post:
+        with patch("brain.default_gateway.generate") as mock_post:
             mock_post.side_effect = [
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'}),
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'}),
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'}),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "NO_OP_FAIL", "arguments": {}}'),
             ]
             ans = run_planner_task("Perform goal", registry=reg, max_steps=5, quiet=True)
             self.assertIn("Brain Error", ans)

@@ -79,7 +79,7 @@ class TestPhase115Integration(unittest.TestCase):
         with patch.object(default_gateway, "generate") as mock_gen:
             mock_gen.return_value = ModelResponse(
                 text='{"type": "final", "answer": "You prefer VS Code as your editor."}',
-                model="mock-qwen",
+                model="mock-llm",
                 provider="mock",
                 success=True
             )
@@ -223,7 +223,7 @@ class TestPhase115Integration(unittest.TestCase):
         with patch.object(default_gateway, "generate") as mock_gen:
             mock_gen.return_value = ModelResponse(
                 text='{"type": "tool", "tool": "TYPE_TEXT", "arguments": {"text": "rm -rf /"}}',
-                model="mock-qwen",
+                model="mock-llm",
                 provider="mock",
                 success=True
             )
@@ -277,7 +277,7 @@ class TestPhase115Integration(unittest.TestCase):
         with patch.object(default_gateway, "generate") as mock_gen:
             mock_gen.return_value = ModelResponse(
                 text='{"type": "final", "answer": "Your preferred editor is VS Code, and it is not currently running."}',
-                model="mock-qwen",
+                model="mock-llm",
                 provider="mock",
                 success=True
             )

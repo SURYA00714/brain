@@ -12,47 +12,35 @@ class TestBrainMainController(unittest.TestCase):
 
     # --- Phase 3B Filesystem Classification Tests ---
 
-    @patch("brain.requests.post")
-    def test_ask_brain_list_files_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "LIST_FILES: Downloads"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_list_files_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="LIST_FILES: Downloads", model="mock", provider="mock", success=True)
         intent, loc = ask_brain("list files in Downloads")
         self.assertEqual(intent, "LIST_FILES")
         self.assertEqual(loc, "Downloads")
 
-    @patch("brain.requests.post")
-    def test_ask_brain_find_files_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "FIND_FILES: *.py | Brain"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_find_files_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="FIND_FILES: *.py | Brain", model="mock", provider="mock", success=True)
         intent, (pattern, loc) = ask_brain("find Python files in Brain")
         self.assertEqual(intent, "FIND_FILES")
         self.assertEqual(pattern, "*.py")
         self.assertEqual(loc, "Brain")
 
-    @patch("brain.requests.post")
-    def test_ask_brain_read_text_file_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "READ_TEXT_FILE: brain.py"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_read_text_file_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="READ_TEXT_FILE: brain.py", model="mock", provider="mock", success=True)
         intent, filepath = ask_brain("read brain.py")
         self.assertEqual(intent, "READ_TEXT_FILE")
         self.assertEqual(filepath, "brain.py")
 
-    @patch("brain.requests.post")
-    def test_ask_brain_create_folder_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "CREATE_FOLDER: brain_test | Downloads"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_create_folder_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="CREATE_FOLDER: brain_test | Downloads", model="mock", provider="mock", success=True)
         intent, (name, parent) = ask_brain("create a folder called brain_test in Downloads")
         self.assertEqual(intent, "CREATE_FOLDER")
         self.assertEqual(name, "brain_test")
@@ -78,24 +66,18 @@ class TestBrainMainController(unittest.TestCase):
 
     # --- Web Search & Chat Intent Tests ---
 
-    @patch("brain.requests.post")
-    def test_ask_brain_web_search_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "WEB_SEARCH: Python tutorials"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_web_search_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="WEB_SEARCH: Python tutorials", model="mock", provider="mock", success=True)
         intent, query = ask_brain("search the web for Python tutorials")
         self.assertEqual(intent, "WEB_SEARCH")
         self.assertEqual(query, "Python tutorials")
 
-    @patch("brain.requests.post")
-    def test_ask_brain_chat_intent(self, mock_post):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "CHAT"}
-        mock_post.return_value = mock_response
-
+    @patch("brain.default_gateway.generate")
+    def test_ask_brain_chat_intent(self, mock_gen):
+        from models.gateway import ModelResponse
+        mock_gen.return_value = ModelResponse(text="CHAT", model="mock", provider="mock", success=True)
         intent, query = ask_brain("what is Linux?")
         self.assertEqual(intent, "CHAT")
 
@@ -105,7 +87,7 @@ class TestBrainMainController(unittest.TestCase):
     @patch("brain.open_app")
     @patch("brain.ask_brain")
     @patch("builtins.input", side_effect=["", "   ", "exit"])
-    def test_empty_input_does_not_call_qwen_or_tools(self, mock_input, mock_ask, mock_app, mock_search):
+    def test_empty_input_does_not_call_llm_or_tools(self, mock_input, mock_ask, mock_app, mock_search):
         from brain import run_brain
         run_brain()
 

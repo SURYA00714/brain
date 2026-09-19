@@ -1,3 +1,4 @@
+from models.gateway import ModelResponse
 import unittest
 from unittest.mock import patch, MagicMock
 import time
@@ -229,11 +230,11 @@ class TestVisionAndControl(unittest.TestCase):
         reg = ToolRegistry()
         reg.register(Tool("OPEN_APP", "Open app", {"app_name": "str"}, "MEDIUM", lambda app: "Brave opened."))
 
-        with patch("requests.post") as mock_post, patch("brain.analyze_captured_screen") as mock_analyze:
+        with patch("brain.default_gateway.generate") as mock_post, patch("brain.analyze_captured_screen") as mock_analyze:
 
             mock_post.side_effect = [
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "OPEN_APP", "arguments": {"app_name": "brave"}}'}),
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "final", "answer": "Done."}'})
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "OPEN_APP", "arguments": {"app_name": "brave"}}'),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "final", "answer": "Done."}')
             ]
             final_ans = run_planner_task("Open Brave", registry=reg, quiet=True)
             self.assertIn(final_ans, ("Done.", "Brave opened.", "Brave is open."))
@@ -245,12 +246,12 @@ class TestVisionAndControl(unittest.TestCase):
         default_vision.set_provider(UnavailableVisionProvider())
         default_vision.analyze_screen("/tmp/test.png")
 
-        with patch("requests.post") as mock_post:
+        with patch("brain.default_gateway.generate") as mock_post:
             mock_post.side_effect = [
                 # Step 1: Model tries CLICK_ELEMENT on missing element -> fails
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "CLICK_ELEMENT", "arguments": {"element_id": "missing_btn"}}'}),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "CLICK_ELEMENT", "arguments": {"element_id": "missing_btn"}}'),
                 # Step 2: Model sees failure in history and provides final answer
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "final", "answer": "Element was not found on screen."}'})
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "final", "answer": "Element was not found on screen."}')
             ]
             final_ans = run_planner_task("Click missing button", registry=reg, quiet=True)
             self.assertEqual(final_ans, "Element was not found on screen.")
@@ -259,10 +260,10 @@ class TestVisionAndControl(unittest.TestCase):
         reg = ToolRegistry()
         reg.register(Tool("SCREENSHOT", "Take screenshot", {}, "LOW", lambda: {"image_path": "/tmp/test.png"}))
 
-        with patch("requests.post") as mock_post:
+        with patch("brain.default_gateway.generate") as mock_post:
             mock_post.side_effect = [
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "SCREENSHOT", "arguments": {}}'}),
-                MagicMock(status_code=200, json=lambda: {"response": '{"type": "tool", "tool": "SCREENSHOT", "arguments": {}}'})
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "SCREENSHOT", "arguments": {}}'),
+                ModelResponse(model="mock", provider="mock", success=True, text='{"type": "tool", "tool": "SCREENSHOT", "arguments": {}}')
             ]
             res = run_planner_task("Take screenshots", registry=reg, quiet=True)
             self.assertIn("Brain Error: Repeated identical action 'SCREENSHOT' detected consecutively", res)

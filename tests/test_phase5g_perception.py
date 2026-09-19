@@ -150,7 +150,7 @@ class TestPhase5GPerception(unittest.TestCase):
 
     def test_16_ocr_missing_image(self):
         ocr = OCRProvider()
-        with patch.object(ocr, "available", True), patch("tools.vision.HAS_RAPID_OCR", True):
+        with patch.object(ocr, "available", True), patch("tools.vision.HAS_RAPID_OCR", True), patch("tools.vision._rapid_ocr_engine", MagicMock()):
             res = ocr.extract_text("/nonexistent/file.png")
             self.assertFalse(res["success"])
             self.assertEqual(res["status"], "IMAGE_NOT_FOUND")

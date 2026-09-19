@@ -137,6 +137,7 @@ class DesktopPresenceManager:
             }
 
         self._last_launch_time = now
+
         env = os.environ.copy()
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = STEAM_CLIENT_PATH
         env["STEAM_COMPAT_DATA_PATH"] = COMPAT_DATA_PATH
@@ -146,6 +147,16 @@ class DesktopPresenceManager:
         env["WINEDLLOVERRIDES"] = "winhttp=n,b"
         env["WINEDEBUG"] = "-all"
 
+        logger.info("Configuring Wine registry for BepInEx...")
+        user_reg = os.path.join(COMPAT_DATA_PATH, "pfx", "user.reg")
+        if os.path.exists(user_reg):
+            with open(user_reg, "r") as f:
+                content = f.read()
+            if '"winhttp"="native,builtin"' not in content:
+                with open(user_reg, "a") as f:
+                    f.write('\n[Software\\\\Wine\\\\DllOverrides]\n"winhttp"="native,builtin"\n')
+                logger.info("Added winhttp DLL override to user.reg")
+
         logger.info("Launching Desktop Mate under Proton 9.0...")
         try:
             subprocess.Popen(
@@ -154,13 +165,12 @@ class DesktopPresenceManager:
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                start_new_session=True,
             )
         except Exception as e:
             return {
                 "success": False,
                 "status": "launch_failed",
-                "error": f"Failed to spawn Proton process: {e}",
+                "error": f"Failed to launch Desktop Mate: {str(e)}",
             }
 
         # Wait up to 12 seconds for startup

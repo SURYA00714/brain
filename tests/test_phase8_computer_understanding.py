@@ -186,7 +186,7 @@ class TestPhase8AtoZComputerUnderstanding(unittest.TestCase):
         self.assertEqual(c_status, "REQUIRED")
         
         # LLM self-approval must be rejected
-        self.assertFalse(cm.approve(req.request_id, source="qwen"))
+        self.assertFalse(cm.approve(req.request_id, source="llm"))
         
         # User approval must succeed
         self.assertTrue(cm.approve(req.request_id, source="user"))

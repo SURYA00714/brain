@@ -23,7 +23,7 @@ from core.context import default_context_builder
 
 
 URL = "http://localhost:11434/api/generate"
-MODEL = "qwen2.5:3b"
+MODEL = "llama-3.1-8b-instant"
 MAX_STEPS = 10
 ALLOWED_INTENTS = {
     "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "OPEN_BRAVE", "WEB_SEARCH",
@@ -73,7 +73,7 @@ def clean_search_query(user_text, extracted_query=""):
 
 def parse_model_action(response_text):
     """
-    Parses Qwen output into a structured action dictionary.
+    Parses LLM output into a structured action dictionary.
     Action formats:
     - Tool call: {"type": "tool", "tool": "TOOL_NAME", "arguments": {...}}
     - Final answer: {"type": "final", "answer": "..."}
@@ -239,7 +239,7 @@ def is_visual_request(request_text):
 
 
 def build_planner_prompt(user_request, history):
-    """Builds system prompt for Qwen specifying tools, JSON format, screen observations, and isolated task history."""
+    """Builds system prompt for the LLM specifying tools, JSON format, screen observations, and isolated task history."""
     req_lowered = user_request.lower() if user_request else ""
     gui_browser_req = any(kw in req_lowered for kw in ["open brave", "in brave", "open browser", "in the browser", "using brave"])
 
@@ -415,7 +415,7 @@ class TaskState:
 def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=False, debug=False):
     """
     Executes a multi-step ExecutionPlan sequentially with state verification and bounded recovery.
-    Does NOT invoke Qwen LLM for every step.
+    Does NOT invoke the LLM for every step.
     Returns final response string.
     """
     task_state = TaskState(user_request)
@@ -473,7 +473,7 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
             # Phase 18: Post-Action Multi-Signal Physical State Verification
             if result.get("success"):
                 if tool_name == "OPEN_APP":
-                    app_to_check = args.get("app_name", "")
+                    app_to_check = args.get("name") or args.get("app_name") or ""
                     from tools.apps import verify_app_open
                     from core.telemetry import default_telemetry
                     default_world_state.sync_from_system()
@@ -488,7 +488,7 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
                     app_to_check = args.get("app_name", "")
                     from tools.apps import default_app_tracker
                     default_world_state.sync_from_system()
-                    if default_app_tracker.is_running(app_to_check):
+                    if os.environ.get("BRAIN_MOCK_GUI") != "1" and default_app_tracker.is_running(app_to_check):
                         result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
 
             default_world_state.record_action_outcome(tool_name, args, result, verified=result.get("success", False))
@@ -614,7 +614,7 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
     """
     Executes the multi-step reasoning and tool-execution planner loop.
     Supports FastRouter pre-routing for <100ms response latency on high-confidence tasks,
-    single-pass ExecutionPlan execution without Qwen re-entry per step,
+    single-pass ExecutionPlan execution without LLM re-entry per step,
     and PerformanceProfiler telemetry metrics tracking.
     Returns final answer string or error message.
     """
@@ -756,7 +756,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             # Phase 18: Physical State Verification
             if result.get("success"):
                 if tool_name == "OPEN_APP":
-                    app_to_check = args.get("app_name", "")
+                    app_to_check = args.get("name") or args.get("app_name") or ""
                     from tools.apps import verify_app_open
                     from core.telemetry import default_telemetry
                     default_world_state.sync_from_system()
@@ -771,7 +771,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                     app_to_check = args.get("app_name", "")
                     from tools.apps import default_app_tracker
                     default_world_state.sync_from_system()
-                    if default_app_tracker.is_running(app_to_check):
+                    if os.environ.get("BRAIN_MOCK_GUI") != "1" and default_app_tracker.is_running(app_to_check):
                         result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
 
             if result.get("success"):
@@ -784,10 +784,31 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                 if tool_name == "TIME":
                     resp = result.get("data") if result.get("data") else "Current time retrieved."
                 elif tool_name == "OPEN_APP":
-                    app = args.get("app_name", "")
-                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor", "calculator": "Calculator"}
-                    name_str = app_map.get(app, app.title() if app else "Application")
-                    resp = f"{name_str} is open."
+                    if result.get("success"):
+                        data_val = result.get("data", {})
+                        app_title = data_val.get("name") if isinstance(data_val, dict) else (args.get("name") or args.get("app_name") or "Application")
+                        if app_title.lower().startswith("brave"):
+                            resp = "Brave is open."
+                        else:
+                            resp = f"{app_title} is open."
+                    else:
+                        err_str = str(result.get("error", "Unknown error"))
+                        if err_str.startswith("Error:"):
+                            resp = err_str
+                        else:
+                            resp = f"Brain Error: Action 'OPEN_APP' failed ({err_str}). Plan halted."
+                elif tool_name == "LIST_APPS":
+                    if result.get("success"):
+                        apps_data = result.get("data", {}).get("apps", [])
+                        if apps_data:
+                            lines = ["Installed GUI applications:\n"]
+                            for app in apps_data:
+                                lines.append(f"- {app.get('name')}")
+                            resp = "\n".join(lines)
+                        else:
+                            resp = "No installed GUI applications discovered."
+                    else:
+                        resp = f"Error listing applications: {result.get('error')}"
                 elif tool_name == "CLOSE_APP":
                     resp = str(result.get("data")) if result.get("data") else "Application closed."
                 elif tool_name == "FOCUS_APP":
@@ -987,7 +1008,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                 groq_avail = default_gateway.providers["groq"].is_available()
                 gemini_avail = default_gateway.providers["gemini"].is_available()
                 telemetry.cloud_attempted = groq_avail or gemini_avail
-                telemetry.llm_provider = "groq" if groq_avail else ("gemini" if gemini_avail else "ollama")
+                telemetry.llm_provider = "groq" if groq_avail else "gemini"
                 telemetry.llm_time_ms = (t_llm_end - t_llm_start) * 1000.0
             telemetry.provenance = "MODEL"
             default_telemetry.finish_request()
@@ -1036,11 +1057,10 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
         raw_output = resp.text.strip()
         gen_ms = resp.duration_ms or ((t1 - t0) * 1000.0)
 
-        qwen_telemetry = {
-            "qwen_called": True,
-            "model": resp.model,
-            "endpoint": URL if resp.provider == "ollama" else resp.provider,
+        llm_telemetry = {
+            "llm_called": True,
             "provider": resp.provider,
+            "endpoint": resp.provider,
             "fallback_used": resp.fallback_used,
             "request_started": t0,
             "request_finished": t1,
@@ -1049,7 +1069,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             "response_length": len(raw_output)
         }
         if not quiet:
-            print(f"[QWEN_TELEMETRY] qwen_called=True model={resp.model} endpoint={URL if resp.provider == 'ollama' else resp.provider} gen_time_ms={gen_ms:.2f} prompt_chars={len(prompt)} resp_chars={len(raw_output)}")
+            print(f"[LLM_TELEMETRY] llm_called=True model={resp.model} endpoint={resp.provider} gen_time_ms={gen_ms:.2f} prompt_chars={len(prompt)} resp_chars={len(raw_output)}")
 
         if debug:
             print(f"[DEBUG] MODEL ({resp.provider}) RESPONSE DURATION: {t1 - t0:.2f}s")
@@ -1262,7 +1282,7 @@ def run_brain():
             print("\nExiting Brain. Goodbye!")
             break
 
-        # Empty line handling: prompt again without sending to Ollama
+        # Empty line handling: prompt again without sending to the LLM
         if not user_input:
             continue
 

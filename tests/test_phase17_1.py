@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch, MagicMock
 
-from models.gateway import ModelGateway, ModelResponse, GroqProvider, GeminiProvider, OllamaProvider
+from models.gateway import ModelGateway, ModelResponse, GroqProvider, GeminiProvider
 from core.cognition import CognitiveEngine, default_cognition
 from core.telemetry import default_telemetry, RequestTelemetry
 from brain import run_planner_task
@@ -42,22 +42,13 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
         elif "GOOGLE_API_KEY" in os.environ:
             del os.environ["GOOGLE_API_KEY"]
 
-    # 1. No cloud keys -> Qwen fallback
-    def test_01_no_cloud_keys_uses_qwen_offline(self):
+    # 1. No cloud keys -> Cloud failure (No local fallback)
+    def test_01_no_cloud_keys_fails(self):
         gateway = ModelGateway()
-        with patch.object(gateway.providers["ollama"], "generate", return_value=ModelResponse(
-            text="Local Qwen offline answer",
-            model="qwen2.5:3b",
-            provider="ollama",
-            duration_ms=45.0,
-            success=True
-        )) as mock_ollama:
-            resp = gateway.generate("Explain polymorphism", tier="AUTO")
-            self.assertTrue(resp.success)
-            self.assertEqual(resp.provider, "ollama")
-            self.assertFalse(resp.cloud_attempted)
-            self.assertFalse(resp.fallback_used)
-            mock_ollama.assert_called_once()
+        resp = gateway.generate("Explain polymorphism", tier="AUTO")
+        self.assertFalse(resp.success)
+        err_msg = (resp.error or "").lower()
+        self.assertTrue("error" in err_msg or "no cloud models" in err_msg)
 
     # 2. Groq configured -> Groq selected
     def test_02_groq_configured_selected(self):
@@ -69,14 +60,13 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
             provider="groq",
             duration_ms=250.0,
             success=True
-        )) as mock_groq, patch.object(gateway.providers["ollama"], "generate") as mock_ollama:
+        )) as mock_groq:
             resp = gateway.generate("Compare Rust and Go", tier="AUTO")
             self.assertTrue(resp.success)
             self.assertEqual(resp.provider, "groq")
             self.assertTrue(resp.cloud_attempted)
             self.assertFalse(resp.fallback_used)
             mock_groq.assert_called_once()
-            mock_ollama.assert_not_called()
 
     # 3. Gemini configured -> Gemini selected when appropriate
     def test_03_gemini_configured_selected(self):
@@ -88,16 +78,15 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
             provider="gemini",
             duration_ms=400.0,
             success=True
-        )) as mock_gemini, patch.object(gateway.providers["ollama"], "generate") as mock_ollama:
+        )) as mock_gemini:
             resp = gateway.generate("Deep architectural comparison", tier="DEEP")
             self.assertTrue(resp.success)
             self.assertEqual(resp.provider, "gemini")
             self.assertTrue(resp.cloud_attempted)
             mock_gemini.assert_called_once()
-            mock_ollama.assert_not_called()
 
-    # 4. Cloud success -> no Qwen call
-    def test_04_cloud_success_no_qwen_call(self):
+    # 4. Cloud success -> no fallback call
+    def test_04_cloud_success_no_fallback_call(self):
         os.environ["GROQ_API_KEY"] = "mock_key"
         gateway = ModelGateway()
         with patch.object(gateway.providers["groq"], "generate", return_value=ModelResponse(
@@ -106,13 +95,12 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
             provider="groq",
             duration_ms=180.0,
             success=True
-        )), patch.object(gateway.providers["ollama"], "generate") as mock_ollama:
+        )):
             resp = gateway.generate("Explain Python GIL", tier="CLOUD")
             self.assertEqual(resp.provider, "groq")
-            mock_ollama.assert_not_called()
 
-    # 5. Cloud failure -> bounded Qwen fallback
-    def test_05_cloud_failure_bounded_qwen_fallback(self):
+    # 5. Cloud failure -> Returns explicit failure
+    def test_05_cloud_failure_explicit_failure(self):
         os.environ["GROQ_API_KEY"] = "mock_key"
         gateway = ModelGateway()
         with patch.object(gateway.providers["groq"], "generate", return_value=ModelResponse(
@@ -122,20 +110,11 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
             duration_ms=50.0,
             success=False,
             error="Groq 503 service unavailable"
-        )), patch.object(gateway.providers["ollama"], "generate", return_value=ModelResponse(
-            text="Offline fallback answer",
-            model="qwen2.5:3b",
-            provider="ollama",
-            duration_ms=1200.0,
-            success=True
-        )) as mock_ollama:
+        )):
             resp = gateway.generate("Explain recursion", tier="CLOUD")
-            self.assertTrue(resp.success)
-            self.assertEqual(resp.provider, "ollama")
+            self.assertFalse(resp.success)
+            self.assertIn("Groq 503", resp.error)
             self.assertTrue(resp.cloud_attempted)
-            self.assertTrue(resp.fallback_used)
-            self.assertIn("Groq 503", resp.cloud_failure_reason)
-            mock_ollama.assert_called_once()
 
     # 6. Telemetry records provider and latency
     def test_06_telemetry_records_provider_and_latency(self):
@@ -151,15 +130,12 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
                 success=True,
                 cloud_attempted=True
             )
-            mock_ollama = MagicMock()
-            mock_ollama.is_available.return_value = True
             mock_gemini = MagicMock()
             mock_gemini.is_available.return_value = False
 
             mock_providers.__getitem__.side_effect = lambda k: {
                 "groq": mock_groq,
-                "gemini": mock_gemini,
-                "ollama": mock_ollama
+                "gemini": mock_gemini
             }[k]
 
             with patch("core.cognition.default_cognition.process_reasoning_query") as mock_proc:
@@ -246,7 +222,7 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
         os.environ["GROQ_API_KEY"] = "groq_key"
         os.environ["GEMINI_API_KEY"] = "gemini_key"
         gateway = ModelGateway()
-        call_counts = {"groq": 0, "gemini": 0, "ollama": 0}
+        call_counts = {"groq": 0, "gemini": 0}
 
         def mock_groq_gen(*args, **kwargs):
             call_counts["groq"] += 1
@@ -256,20 +232,14 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
             call_counts["gemini"] += 1
             return ModelResponse("", "gemini-2.5", "gemini", success=False, error="timeout")
 
-        def mock_ollama_gen(*args, **kwargs):
-            call_counts["ollama"] += 1
-            return ModelResponse("final offline answer", "qwen2.5:3b", "ollama", success=True)
-
         with patch.object(gateway.providers["groq"], "generate", side_effect=mock_groq_gen), \
-             patch.object(gateway.providers["gemini"], "generate", side_effect=mock_gemini_gen), \
-             patch.object(gateway.providers["ollama"], "generate", side_effect=mock_ollama_gen):
+             patch.object(gateway.providers["gemini"], "generate", side_effect=mock_gemini_gen):
 
             resp = gateway.generate("Explain recursion", tier="CLOUD")
             self.assertEqual(call_counts["groq"], 1)
             self.assertEqual(call_counts["gemini"], 1)
-            self.assertEqual(call_counts["ollama"], 1)
-            self.assertTrue(resp.fallback_used)
-            self.assertEqual(resp.provider, "ollama")
+            self.assertFalse(resp.success)
+            self.assertEqual(resp.provider, "gemini")
 
     # 13. Existing safety paths remain deterministic
     def test_13_existing_safety_remains_deterministic(self):
@@ -297,7 +267,7 @@ class TestPhase17_1CloudIntelligence(unittest.TestCase):
         self.assertIn("Cloud Intelligence", ans)
         self.assertIn("Groq:", ans)
         self.assertIn("Gemini:", ans)
-        self.assertIn("Local Qwen:", ans)
+        self.assertNotIn("Local Qwen:", ans)
         last_tel = default_telemetry.get_last()
         self.assertIsNotNone(last_tel)
         self.assertEqual(last_tel.llm_calls_this_request, 0)

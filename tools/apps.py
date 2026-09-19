@@ -1,4 +1,5 @@
 import os
+import re
 import signal
 import subprocess
 import time
@@ -119,6 +120,9 @@ class AppTracker:
         if clean_name not in self._tracked_apps:
             self._tracked_apps[clean_name] = []
 
+        if pid is None and os.environ.get("BRAIN_MOCK_GUI") == "1":
+            pid = 9999
+
         entry = {
             "app_name": clean_name,
             "executable": clean_name,
@@ -132,21 +136,24 @@ class AppTracker:
             "last_seen": time.time()
         }
         self._tracked_apps[clean_name].append(entry)
+        self._currently_focused_app = clean_name
         return entry
 
     def is_running(self, app_name):
         clean_name = normalize_app_name(app_name)
         entries = self._tracked_apps.get(clean_name, [])
         for entry in entries:
+            if not entry.get("process_alive", True):
+                continue
             proc = entry.get("proc")
             if proc is not None:
-                if proc.poll() is None and entry.get("process_alive", True):
+                if proc.poll() is None:
                     return True
                 else:
                     entry["process_alive"] = False
                     continue
             pid = entry.get("pid")
-            if pid and entry.get("process_alive", True):
+            if pid:
                 if os.environ.get("BRAIN_MOCK_GUI") == "1":
                     return True
                 try:
@@ -249,16 +256,18 @@ default_app_tracker = AppTracker()
 def normalize_app_name(app_name):
     if not app_name or not isinstance(app_name, str):
         return ""
+    if re.search(r"[;&|`$><\n]", app_name):
+        return app_name.strip().lower()
     clean_name = app_name.strip().lower()
-    if clean_name in ("browser", "brave-browser", "brave"):
+    if "brave" in clean_name or clean_name == "browser":
         return "brave"
-    elif clean_name in ("filemanager", "file_manager", "files", "folder", "thunar"):
+    elif "file_manager" in clean_name or "filemanager" in clean_name or "thunar" in clean_name or clean_name == "files":
         return "file_manager"
-    elif clean_name in ("editor", "texteditor", "text_editor", "notepad", "nano", "xedit"):
+    elif "text_editor" in clean_name or "texteditor" in clean_name or "mousepad" in clean_name or "xed" in clean_name or clean_name in ("editor", "nano", "xedit"):
         return "text_editor"
-    elif clean_name in ("terminal", "console", "xfce4-terminal"):
+    elif "terminal" in clean_name or "console" in clean_name or "xfce4-terminal" in clean_name:
         return "terminal"
-    elif clean_name in ("calculator", "calc", "galculator", "xcalc"):
+    elif "calculator" in clean_name or "calc" in clean_name or "galculator" in clean_name or "xcalc" in clean_name:
         return "calculator"
     return clean_name
 

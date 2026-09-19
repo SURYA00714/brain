@@ -5,7 +5,7 @@ class FastRouter:
     """
     Lightweight Deterministic Pre-Router for Brain.
     Pre-routes unambiguous, high-confidence intents to tool calls or direct responses
-    in <100ms without invoking Ollama Qwen generation.
+    in <100ms without invoking LLM generation.
     Returns parsed action dict or None.
     """
     def __init__(self):
@@ -76,14 +76,6 @@ class FastRouter:
             from models.gateway import ModelRuntimeStatus
             return {"type": "final", "answer": ModelRuntimeStatus.get_runtime_identity_summary()}
 
-        qwen_queries = {
-            "for what do you use qwen", "what do you use qwen for", "why do you use qwen",
-            "when do you use qwen", "do you use qwen", "why qwen", "what is qwen used for",
-            "for what do you use qwen?", "what do you use qwen for?"
-        }
-        if norm_text in qwen_queries or clean_norm in qwen_queries:
-            from models.gateway import ModelRuntimeStatus
-            return {"type": "final", "answer": ModelRuntimeStatus.get_qwen_purpose_summary()}
 
         # 1b-3. Procedural Skills & Task Continuity Queries (NO LLM, <2ms)
         skills_queries = {"list skills", "what skills do you have", "show skills", "procedural skills", "skills"}
@@ -191,10 +183,13 @@ class FastRouter:
                 return {"type": "final", "answer": "No Brain-tracked applications are currently running."}
 
         # Active App / Window Queries
+        if norm_text in {"active window", "focused window", "get active window", "current active window"}:
+            return {"type": "tool", "tool": "ACTIVE_WINDOW", "arguments": {}}
+
         active_app_queries = {
             "which app am i using", "what app am i using", "which application am i using",
             "what application am i using", "what app is active", "what is the active app",
-            "which app is active", "what window is active", "active window", "focused app"
+            "which app is active", "what window is active", "focused app"
         }
         if norm_text in active_app_queries or clean_norm in active_app_queries:
             from tools.apps import get_system_state_summary
@@ -214,7 +209,9 @@ class FastRouter:
             "disk space", "disk usage", "free disk space", "how much storage do i have", "storage space",
             "check disk space", "disk status"
         }
-        if (norm_text in disk_queries or clean_norm in disk_queries or ("disk space" in clean_norm or "free disk" in clean_norm)) and "terminal" not in clean_norm:
+        if norm_text in {"disk status", "show disk status", "show disk", "disk info"}:
+            return {"type": "tool", "tool": "DISK_STATUS", "arguments": {}}
+        elif (norm_text in disk_queries or clean_norm in disk_queries or ("disk space" in clean_norm or "free disk" in clean_norm)) and "terminal" not in clean_norm:
             from tools.apps import get_system_state_summary
             state = get_system_state_summary()
             disk = state.get("disk", {})
@@ -226,7 +223,9 @@ class FastRouter:
             "how much free ram", "ram usage", "memory usage", "free ram", "free memory",
             "ram available", "memory available"
         }
-        if norm_text in ram_queries or clean_norm in ram_queries or ("ram" in clean_norm and ("available" in clean_norm or "free" in clean_norm or "usage" in clean_norm)):
+        if norm_text in {"memory status", "show memory status", "show memory", "memory info"}:
+            return {"type": "tool", "tool": "MEMORY_STATUS", "arguments": {}}
+        elif norm_text in ram_queries or clean_norm in ram_queries or ("ram" in clean_norm and ("available" in clean_norm or "free" in clean_norm or "usage" in clean_norm)):
             from tools.apps import get_system_state_summary
             state = get_system_state_summary()
             mem = state.get("memory", {})
@@ -388,7 +387,7 @@ class FastRouter:
                 return {"type": "final", "answer": "I do not have any stored preferences recorded yet."}
 
         # 3. Deterministic Compound Multi-Step Workflows (e.g. Open Brave & Search, Open + Observe, File Manager)
-        # Check compound workflows BEFORE semantic triggers to build fast ExecutionPlans without Qwen
+        # Check compound workflows BEFORE semantic triggers to build fast ExecutionPlans without LLM
         from tools.plan import ExecutionPlan, ExecutionStep
 
         # 3a-0. Open Brave, open new tab and search for X [optional: and click first result]
@@ -420,14 +419,28 @@ class FastRouter:
                     plan.add_step(ExecutionStep(step_id=6, depends_on=[5], action_type="final", answer=f"Opened Brave, opened a new tab, and searched for '{query}'."))
                 return {"type": "plan", "plan": plan}
 
-        # 3a-1. Standalone Open New Tab in Brave
-        if norm_text in {"open new tab", "open a new tab", "new tab", "open a new tab in brave", "open new tab in browser"}:
-            plan = ExecutionPlan(goal=clean_text)
-            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", verification_method="app_running", description="Open Brave browser"))
-            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", verification_method="focus", description="Focus Brave window"))
-            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="NEW_TAB", arguments={}, expected_outcome="New tab ready", verification_method="none", description="Open new tab"))
-            plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer="Opened a new tab in Brave."))
-            return {"type": "plan", "plan": plan}
+        # 3a-2. Open <app> and maximize it / make full screen
+        open_max_match = re.match(r"^(?:open|launch|start) (.+?) (?:and |, )?(?:maximize it|maximize|make it full screen|full screen)$", norm_text, flags=re.IGNORECASE)
+        if open_max_match:
+            app_target = open_max_match.group(1).strip()
+            if app_target:
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": app_target}, expected_outcome=f"{app_target} open", description=f"Open {app_target}"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_WINDOW", arguments={"target": app_target}, expected_outcome=f"{app_target} focused", description=f"Focus {app_target} window"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="MAXIMIZE_WINDOW", arguments={"target": app_target}, expected_outcome=f"{app_target} maximized", description=f"Maximize {app_target} window"))
+                plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened and maximized {app_target}."))
+                return {"type": "plan", "plan": plan}
+
+        # 3a-3. Open Brave and go to / navigate to <url>
+        open_nav_match = re.match(r"^(?:open|launch|start) (?:brave|browser) (?:and |, )?(?:go to|navigate to) (.+)$", norm_text, flags=re.IGNORECASE)
+        if open_nav_match:
+            target_url = open_nav_match.group(1).strip()
+            if target_url:
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
+                return {"type": "plan", "plan": plan}
 
         # 3a. Open Brave and search for X [optional: then tell me what you see]
         for prefix in [
@@ -521,9 +534,14 @@ class FastRouter:
             plan.add_step(ExecutionStep(action_type="tool", tool_name="CHECK_DISK_SPACE", arguments={"target_path": "/"}))
             return {"type": "plan", "plan": plan}
 
+        # List Apps (Developer/Debug Installed Applications Inventory)
+        list_apps_queries = {"list apps", "list installed apps", "show installed apps", "show apps", "list applications", "installed apps"}
+        if norm_text in list_apps_queries or clean_norm in list_apps_queries:
+            return {"type": "tool", "tool": "LIST_APPS", "arguments": {}}
+
         # 4. Simple Single-Intent App Launch & System Requests
         # Strictly match simple single-intent requests, NOT multi-step compound requests ("open brave and search...")
-        if " and " not in norm_text and " then " not in norm_text and "," not in norm_text:
+        if " and " not in norm_text and " then " not in norm_text and "," not in norm_text and not re.search(r"[;&|`$]", norm_text):
             app_req_text = norm_text
             for noise in ["can you ", "could you ", "please ", "i want to ", "would you "]:
                 if app_req_text.startswith(noise):
@@ -532,18 +550,18 @@ class FastRouter:
             # Open App
             for open_prefix in ["open ", "launch ", "start "]:
                 if app_req_text.startswith(open_prefix):
-                    candidate_app = app_req_text[len(open_prefix):].strip()
-                    app_map = {
-                        "brave": "brave", "brave browser": "brave", "browser": "brave", "the browser": "brave", "my browser": "brave",
-                        "file manager": "file_manager", "thunar": "file_manager", "files": "file_manager", "the file manager": "file_manager",
-                        "terminal": "terminal", "console": "terminal", "the terminal": "terminal",
-                        "text editor": "text_editor", "editor": "text_editor", "nano": "text_editor",
-                        "calculator": "calculator", "calc": "calculator"
-                    }
-                    if candidate_app in app_map:
-                        return {"type": "tool", "tool": "OPEN_APP", "arguments": {"app_name": app_map[candidate_app]}}
-                    else:
-                        return {"type": "final", "answer": f"The requested application '{candidate_app}' is not in the approved safety allowlist."}
+                    match = re.search(r"^(?:can you\s+|could you\s+|please\s+|i want to\s+|would you\s+)?(?:open|launch|start)\s+(.+)$", clean_text, flags=re.IGNORECASE)
+                    candidate_app = match.group(1).strip() if match else app_req_text[len(open_prefix):].strip()
+                    if candidate_app:
+                        app_map = {
+                            "brave": "brave", "brave browser": "brave", "browser": "brave", "the browser": "brave", "my browser": "brave",
+                            "file manager": "file_manager", "thunar": "file_manager", "files": "file_manager",
+                            "terminal": "terminal", "console": "terminal",
+                            "text editor": "text_editor", "editor": "text_editor",
+                            "calculator": "calculator", "calc": "calculator"
+                        }
+                        mapped_app = app_map.get(candidate_app.lower(), candidate_app)
+                        return {"type": "tool", "tool": "OPEN_APP", "arguments": {"name": mapped_app, "app_name": mapped_app}}
 
             # Close App
             for close_prefix in ["close ", "quit ", "exit ", "kill "]:
@@ -577,9 +595,94 @@ class FastRouter:
             if norm_text in {"take a screenshot", "capture screen", "take screenshot", "screenshot"}:
                 return {"type": "tool", "tool": "SCREENSHOT", "arguments": {}}
 
+            # Phase 1: System Control Tools Routing
+            # Audio & Brightness
+            if norm_text in {"volume up", "increase volume", "turn up volume", "turn volume up", "volume +"}:
+                return {"type": "tool", "tool": "VOLUME_UP", "arguments": {}}
+            if norm_text in {"volume down", "decrease volume", "turn down volume", "turn volume down", "volume -"}:
+                return {"type": "tool", "tool": "VOLUME_DOWN", "arguments": {}}
+            if norm_text in {"mute", "unmute", "mute volume", "toggle mute", "volume mute"}:
+                return {"type": "tool", "tool": "VOLUME_MUTE", "arguments": {}}
+
+            if norm_text in {"brightness up", "increase brightness", "turn up brightness", "screen brightness up"}:
+                return {"type": "tool", "tool": "BRIGHTNESS_UP", "arguments": {}}
+            if norm_text in {"brightness down", "decrease brightness", "turn down brightness", "screen brightness down"}:
+                return {"type": "tool", "tool": "BRIGHTNESS_DOWN", "arguments": {}}
+
+            if norm_text in {"lock screen", "lock computer", "lock desktop", "lock"}:
+                return {"type": "tool", "tool": "LOCK_SCREEN", "arguments": {}}
+
+            # Network Controls
+            if norm_text in {"wifi status", "check wifi", "is wifi on", "wifi state"}:
+                return {"type": "tool", "tool": "WIFI_STATUS", "arguments": {}}
+            if norm_text in {"wifi on", "turn on wifi", "enable wifi", "start wifi"}:
+                return {"type": "tool", "tool": "WIFI_ON", "arguments": {}}
+            if norm_text in {"wifi off", "turn off wifi", "disable wifi", "stop wifi"}:
+                return {"type": "tool", "tool": "WIFI_OFF", "arguments": {}}
+
+            if norm_text in {"bluetooth status", "check bluetooth", "is bluetooth on", "bluetooth state"}:
+                return {"type": "tool", "tool": "BLUETOOTH_STATUS", "arguments": {}}
+            if norm_text in {"bluetooth on", "turn on bluetooth", "enable bluetooth", "start bluetooth"}:
+                return {"type": "tool", "tool": "BLUETOOTH_ON", "arguments": {}}
+            if norm_text in {"bluetooth off", "turn off bluetooth", "disable bluetooth", "stop bluetooth"}:
+                return {"type": "tool", "tool": "BLUETOOTH_OFF", "arguments": {}}
+
+            # System Information & Metrics
+            if norm_text in {"system info", "show system info", "system information", "show system information", "system status"}:
+                return {"type": "tool", "tool": "SYSTEM_INFO", "arguments": {}}
+            if norm_text in {"memory status", "show memory status", "show memory", "memory info"}:
+                return {"type": "tool", "tool": "MEMORY_STATUS", "arguments": {}}
+            if norm_text in {"disk status", "show disk status", "show disk", "disk info"}:
+                return {"type": "tool", "tool": "DISK_STATUS", "arguments": {}}
+            if norm_text in {"cpu status", "show cpu status", "show cpu", "cpu info", "cpu usage"}:
+                return {"type": "tool", "tool": "CPU_STATUS", "arguments": {}}
+
+            # Disruptive Operations (Confirmation Gated)
+            if norm_text in {"shutdown", "shutdown computer", "turn off computer", "power off", "shutdown system", "turn off pc"}:
+                return {"type": "tool", "tool": "SHUTDOWN", "arguments": {}}
+            if norm_text in {"restart", "restart computer", "reboot", "reboot computer", "restart pc", "reboot pc"}:
+                return {"type": "tool", "tool": "RESTART", "arguments": {}}
+            if norm_text in {"suspend", "suspend computer", "sleep", "sleep computer", "put pc to sleep", "suspend system", "sleep system"}:
+                return {"type": "tool", "tool": "SUSPEND", "arguments": {}}
+            if norm_text in {"logout", "log out", "logout user", "exit session"}:
+                return {"type": "tool", "tool": "LOGOUT", "arguments": {}}
+
+            # Phase 2: Window Management Routing
+            if norm_text in {"list windows", "show windows", "list open windows", "show open windows", "get windows"}:
+                return {"type": "tool", "tool": "LIST_WINDOWS", "arguments": {}}
+
+            # Window actions with target window/app
+            for min_p in ["minimize window ", "minimize "]:
+                if norm_text.startswith(min_p) and not norm_text.startswith("minimize window"):
+                    target = clean_text[len(min_p):].strip()
+                    if target:
+                        return {"type": "tool", "tool": "MINIMIZE_WINDOW", "arguments": {"target": target}}
+
+            for max_p in ["maximize window ", "maximize ", "make full screen "]:
+                if norm_text.startswith(max_p):
+                    target = clean_text[len(max_p):].strip()
+                    if target:
+                        return {"type": "tool", "tool": "MAXIMIZE_WINDOW", "arguments": {"target": target}}
+
+            for rest_p in ["restore window ", "restore ", "unmaximize "]:
+                if norm_text.startswith(rest_p):
+                    target = clean_text[len(rest_p):].strip()
+                    if target:
+                        return {"type": "tool", "tool": "RESTORE_WINDOW", "arguments": {"target": target}}
+
+            for close_p in ["close window ", "close "]:
+                if norm_text.startswith(close_p):
+                    target = clean_text[len(close_p):].strip()
+                    # Exclude close app & tab aliases
+                    if target and not target.startswith("tab") and target not in {"brave", "terminal", "file_manager", "text_editor", "calculator"}:
+                        return {"type": "tool", "tool": "CLOSE_WINDOW", "arguments": {"target": target}}
+
+            if norm_text in {"ocr screen", "ocr", "extract text from screen", "read screen text"}:
+                return {"type": "tool", "tool": "OCR_SCREEN", "arguments": {}}
+
             # Analyze Screen (Screen Capture + OCR Perception)
             screen_perception_queries = {
-                "analyze screen", "analyze my screen", "read screen", "ocr screen",
+                "analyze screen", "analyze my screen", "read screen",
                 "tell me what you see", "what do you see", "what is on my screen",
                 "what is on the screen", "what's on my screen", "describe the screen",
                 "describe my screen", "what can you see", "what is on my screen right now",
@@ -588,6 +691,96 @@ class FastRouter:
             }
             if norm_text in screen_perception_queries or norm_text.startswith("what is on my screen") or norm_text.startswith("what's on my screen"):
                 return {"type": "tool", "tool": "ANALYZE_SCREEN", "arguments": {}}
+
+            # Phase 3: Safe Filesystem Operations Routing
+            if norm_text in {"list downloads", "show downloads", "list downloads folder", "show downloads folder"}:
+                return {"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": "Downloads"}}
+
+            for list_p in ["list folder ", "list directory ", "open folder ", "show folder "]:
+                if norm_text.startswith(list_p):
+                    target_f = clean_text[len(list_p):].strip()
+                    if target_f:
+                        return {"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": target_f}}
+
+            for cf_p in ["create folder ", "make folder ", "mkdir "]:
+                if norm_text.startswith(cf_p):
+                    fname = clean_text[len(cf_p):].strip()
+                    if fname:
+                        return {"type": "tool", "tool": "CREATE_FOLDER", "arguments": {"folder_name": fname}}
+
+            for cfile_p in ["create file ", "create empty file ", "touch "]:
+                if norm_text.startswith(cfile_p):
+                    fname = clean_text[len(cfile_p):].strip()
+                    if fname:
+                        return {"type": "tool", "tool": "CREATE_FILE", "arguments": {"file_name": fname}}
+
+            # Copy file: "copy <src> to <dst>"
+            copy_match = re.match(r"^copy (.+?) to (.+)$", norm_text, flags=re.IGNORECASE)
+            if copy_match:
+                src_p, dst_p = copy_match.group(1).strip(), copy_match.group(2).strip()
+                if src_p and dst_p:
+                    return {"type": "tool", "tool": "COPY_FILE", "arguments": {"source": src_p, "destination": dst_p}}
+
+            # Move file: "move <src> to <dst>"
+            move_match = re.match(r"^move (.+?) to (.+)$", norm_text, flags=re.IGNORECASE)
+            if move_match:
+                src_p, dst_p = move_match.group(1).strip(), move_match.group(2).strip()
+                if src_p and dst_p:
+                    return {"type": "tool", "tool": "MOVE_FILE", "arguments": {"source": src_p, "destination": dst_p}}
+
+            # Rename file: "rename <src> to <new_name>"
+            rename_match = re.match(r"^rename (.+?) to (.+)$", norm_text, flags=re.IGNORECASE)
+            if rename_match:
+                src_p, nname = rename_match.group(1).strip(), rename_match.group(2).strip()
+                if src_p and nname:
+                    return {"type": "tool", "tool": "RENAME_FILE", "arguments": {"source": src_p, "new_name": nname}}
+
+            for del_p in ["delete file ", "delete folder ", "delete ", "remove file ", "remove folder "]:
+                if norm_text.startswith(del_p):
+                    tpath = clean_text[len(del_p):].strip()
+                    if tpath and not any(tpath.startswith(w) for w in ["app", "window", "tab"]):
+                        return {"type": "tool", "tool": "DELETE_FILE", "arguments": {"target_path": tpath}}
+
+            for info_p in ["file info ", "inspect file ", "file details "]:
+                if norm_text.startswith(info_p):
+                    tpath = clean_text[len(info_p):].strip()
+                    if tpath:
+                        return {"type": "tool", "tool": "FILE_INFO", "arguments": {"target_path": tpath}}
+
+            # Phase 4: Deterministic Browser Control Routing
+            if norm_text in {"go back", "browser back", "back page", "navigate back"}:
+                return {"type": "tool", "tool": "BROWSER_BACK", "arguments": {}}
+            if norm_text in {"go forward", "browser forward", "forward page", "navigate forward"}:
+                return {"type": "tool", "tool": "BROWSER_FORWARD", "arguments": {}}
+            if norm_text in {"reload", "reload page", "refresh page", "reload browser", "refresh browser"}:
+                return {"type": "tool", "tool": "BROWSER_RELOAD", "arguments": {}}
+            if norm_text in {"page title", "get page title", "what is page title", "get browser title"}:
+                return {"type": "tool", "tool": "BROWSER_TITLE", "arguments": {}}
+            if norm_text in {"page url", "get page url", "current url", "get current url", "what is current url"}:
+                return {"type": "tool", "tool": "BROWSER_URL", "arguments": {}}
+            if norm_text in {"close tab", "close browser tab", "close current tab"}:
+                return {"type": "tool", "tool": "BROWSER_CLOSE_TAB", "arguments": {}}
+            if norm_text in {"list tabs", "show tabs", "list browser tabs"}:
+                return {"type": "tool", "tool": "BROWSER_LIST_TABS", "arguments": {}}
+
+            if norm_text in {"scroll down", "scroll page down", "page down"}:
+                return {"type": "tool", "tool": "BROWSER_SCROLL", "arguments": {"direction": "down", "amount": 500}}
+            if norm_text in {"scroll up", "scroll page up", "page up"}:
+                return {"type": "tool", "tool": "BROWSER_SCROLL", "arguments": {"direction": "up", "amount": 500}}
+
+            for dl_p in ["download file ", "download "]:
+                if norm_text.startswith(dl_p):
+                    target_url = clean_text[len(dl_p):].strip()
+                    if target_url and (target_url.startswith("http://") or target_url.startswith("https://") or "." in target_url):
+                        return {"type": "tool", "tool": "BROWSER_DOWNLOAD", "arguments": {"url": target_url}}
+
+            # Phase 5: Desktop Control & Observation Routing
+            if norm_text in {"screen size", "screen dimensions", "display size", "get screen size"}:
+                return {"type": "tool", "tool": "SCREEN_SIZE", "arguments": {}}
+            if norm_text in {"ocr screen", "ocr", "extract text from screen", "read screen text"}:
+                return {"type": "tool", "tool": "OCR_SCREEN", "arguments": {}}
+            if norm_text in {"active window", "focused window", "get active window", "current active window"}:
+                return {"type": "tool", "tool": "ACTIVE_WINDOW", "arguments": {}}
 
             # Directory Listing
             if norm_text in {
@@ -603,7 +796,7 @@ class FastRouter:
             }:
                 return {"type": "tool", "tool": "FIND_FILES", "arguments": {"pattern": "*.py", "search_root": "Brain"}}
 
-        # Semantic Exclusion Guard: Requests containing open-ended reasoning/summary triggers MUST reach Qwen
+        # Semantic Exclusion Guard: Requests containing open-ended reasoning/summary triggers MUST reach the cloud model
         semantic_triggers = [
             "summarize", "whether", "recommend", "useful", "best",
             "why", "how", "compare", "should", "improvement", "whatever", "find the best",

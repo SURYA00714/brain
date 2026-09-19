@@ -155,14 +155,15 @@ class TestPhase14CognitiveArchitecture(unittest.TestCase):
     # --------------------------------------------------------------------------
     def test_10_end_to_end_contextual_pronoun_workflow(self):
         """End-to-end multi-turn interaction correctly carries context across commands."""
-        # Turn 1: Open Brave
-        ans1 = run_planner_task("can you open brave", quiet=True)
-        self.assertIn("Brave is open", ans1)
-        self.assertEqual(default_short_term_memory.get_last_app(), "brave")
+        with patch.dict(os.environ, {"BRAIN_MOCK_GUI": "1"}):
+            # Turn 1: Open Brave
+            ans1 = run_planner_task("can you open brave", quiet=True)
+            self.assertIn("Brave is open", ans1)
+            self.assertEqual(default_short_term_memory.get_last_app(), "brave")
 
-        # Turn 2: Close it (resolves to close brave)
-        ans2 = run_planner_task("close it", quiet=True)
-        self.assertIn("closed", ans2.lower())
+            # Turn 2: Close it (resolves to close brave)
+            ans2 = run_planner_task("close it", quiet=True)
+            self.assertIn("closed", ans2.lower())
 
     def test_11_static_information_via_run_planner_task(self):
         """'What is Python?' is answered directly via CognitiveEngine static knowledge."""

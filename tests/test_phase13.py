@@ -211,31 +211,23 @@ class TestPhase13FastIntelligenceAndToolOrchestration(unittest.TestCase):
     # 7. MODEL GATEWAY ROUTING POLICY & TRUTHFUL FALLBACK
     # --------------------------------------------------------------------------
     def test_15_model_gateway_cloud_failure_policy(self):
-        """Cloud failure on visual request does not fall back to local Qwen, while text falls back honestly."""
-        gateway = ModelGateway()
+        """Cloud failure on visual request does not fall back to local LLM, and text fails honestly."""
         # Visual request without cloud provider
         with patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
+            gateway = ModelGateway()
             resp = gateway.generate("Describe this chart", image_path="/tmp/nonexistent.png")
             self.assertFalse(resp.success)
             self.assertIn("Vision model unavailable offline", resp.error)
             self.assertFalse(resp.fallback_used)
 
-        # Honest fallback metadata for text request when cloud fails
+        # Honest failure for text request when cloud fails
+        gateway = ModelGateway()
         with patch.object(gateway.providers["groq"], "is_available", return_value=False), \
-             patch.object(gateway.providers["gemini"], "is_available", return_value=False), \
-             patch.object(gateway.providers["ollama"], "generate") as mock_ollama:
-            from models.gateway import ModelResponse
-            mock_ollama.return_value = ModelResponse(
-                text="Ollama answer",
-                model="qwen2.5:3b",
-                provider="ollama",
-                success=True
-            )
+             patch.object(gateway.providers["gemini"], "is_available", return_value=False):
             resp = gateway.generate("Research quantum computing", tier="CLOUD")
-            self.assertTrue(resp.success)
-            self.assertEqual(resp.provider, "ollama")
-            self.assertTrue(resp.fallback_used)
-            self.assertEqual(resp.fallback_reason, "Cloud models unavailable")
+            self.assertFalse(resp.success)
+            err_msg = (resp.error or "").lower()
+            self.assertTrue("error" in err_msg or "no cloud models" in err_msg)
 
 
 if __name__ == "__main__":

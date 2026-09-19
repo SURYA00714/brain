@@ -16,7 +16,7 @@ FALLBACK_IDENTITY_DATA = {
         "Sandboxed filesystem inspection, search, folder creation, and text reading",
         "Structured web search and background headless browser navigation",
         "Foreground desktop GUI interaction and RapidOCR screen perception",
-        "Multi-model cognitive reasoning (FastRouter, Ollama local Qwen, Groq, Gemini)",
+        "Multi-model cognitive reasoning (FastRouter, Groq, Gemini)",
         "Persistent memory, world state tracking, and verified action execution"
     ],
     "limitations": [

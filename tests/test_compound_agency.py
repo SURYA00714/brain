@@ -100,13 +100,9 @@ class TestTruthfulModelRuntimeStatus(unittest.TestCase):
         """Runtime identity summary reports active cloud provider and fallback."""
         summary = ModelRuntimeStatus.get_runtime_identity_summary()
         self.assertIn("cognitive reasoning", summary.lower())
-        self.assertIn("qwen2.5:3b", summary.lower())
+        self.assertIn("groq", summary.lower())
 
-    def test_qwen_purpose_summary(self):
-        """Qwen purpose summary accurately explains local fallback purpose."""
-        purpose = ModelRuntimeStatus.get_qwen_purpose_summary()
-        self.assertIn("offline reasoning fallback", purpose.lower())
-        self.assertIn("qwen2.5:3b", purpose.lower())
+
 
     def test_router_identity_fast_path(self):
         """Router intercepts 'what model do you use' directly as final answer."""
@@ -116,13 +112,7 @@ class TestTruthfulModelRuntimeStatus(unittest.TestCase):
         resp = route_res.get("answer", "")
         self.assertIn("cognitive reasoning", resp.lower())
 
-    def test_router_qwen_purpose_fast_path(self):
-        """Router intercepts 'for what do you use qwen' directly as final answer."""
-        route_res = default_router.route("for what do you use qwen")
-        self.assertIsNotNone(route_res)
-        self.assertEqual(route_res.get("type"), "final")
-        resp = route_res.get("answer", "")
-        self.assertIn("offline reasoning fallback", resp.lower())
+
 
 
 class TestCompanionStateAndEvents(unittest.TestCase):

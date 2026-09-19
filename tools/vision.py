@@ -143,6 +143,80 @@ class UnavailableVisionProvider(BaseVisionProvider):
         }
 
 
+class RemoteGUIVisionProvider(BaseVisionProvider):
+    """
+    Pluggable Remote GUI Vision Provider.
+    Routes screen analysis through remote multimodal models (e.g. Gemini 2.5 Flash)
+    without downloading a large local vision model.
+    """
+    def __init__(self, gateway=None):
+        super().__init__()
+        self.status_name = "REMOTE_GUI_VISION"
+        from models.gateway import default_gateway
+        self.gateway = gateway or default_gateway
+
+    def analyze_screen(self, image_path, screen_width=1920, screen_height=1080):
+        if not image_path or not Path(image_path).exists():
+            return {
+                "success": False,
+                "status": "IMAGE_NOT_FOUND",
+                "screen": {"width": screen_width, "height": screen_height},
+                "elements": [],
+                "image_path": str(image_path) if image_path else "",
+                "timestamp": time.time(),
+                "observation_id": f"obs_{int(time.time()*1000)}"
+            }
+
+        prompt = (
+            "Analyze this GUI screenshot. Return a JSON array of detected interactive UI elements with keys:\n"
+            "type ('button', 'input', 'link', 'text'), label, x (center int), y (center int), confidence (float).\n"
+            "Return ONLY raw JSON object {\"elements\": [...]}.\n"
+        )
+        resp = self.gateway.generate(prompt, tier="DEEP", image_path=image_path, timeout=30.0)
+        if not resp.success or not resp.text:
+            return UnavailableVisionProvider().analyze_screen(image_path, screen_width, screen_height)
+
+        try:
+            import json, re
+            raw = resp.text.strip()
+            match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+            if match:
+                raw = match.group(1).strip()
+            data = json.loads(raw)
+            raw_elems = data.get("elements", [])
+            elements = []
+            for idx, e in enumerate(raw_elems, 1):
+                if isinstance(e, dict):
+                    x = int(e.get("x", 0))
+                    y = int(e.get("y", 0))
+                    lbl = str(e.get("label", f"element_{idx}"))
+                    elem_type = str(e.get("type", "button")).lower()
+                    elements.append({
+                        "id": f"gui_elem_{idx}_{x}_{y}",
+                        "type": elem_type,
+                        "text": lbl,
+                        "x": x - 20,
+                        "y": y - 10,
+                        "width": 40,
+                        "height": 20,
+                        "center_x": x,
+                        "center_y": y,
+                        "confidence": float(e.get("confidence", 0.9)),
+                        "is_sensitive": False
+                    })
+            return {
+                "success": True,
+                "status": "REMOTE_GUI_VISION_ANALYZED",
+                "screen": {"width": screen_width, "height": screen_height},
+                "elements": elements,
+                "image_path": str(image_path),
+                "timestamp": time.time(),
+                "observation_id": f"obs_{int(time.time()*1000)}"
+            }
+        except Exception:
+            return UnavailableVisionProvider().analyze_screen(image_path, screen_width, screen_height)
+
+
 class RapidOCRVisionProvider(BaseVisionProvider):
     """Real lightweight OCR vision provider backed by rapidocr-onnxruntime."""
     def __init__(self):
@@ -238,10 +312,14 @@ class VisionProvider:
     def __init__(self, active_provider=None, ocr_provider=None):
         if active_provider:
             self.active_provider = active_provider
-        elif HAS_RAPID_OCR:
-            self.active_provider = RapidOCRVisionProvider()
         else:
-            self.active_provider = UnavailableVisionProvider()
+            from models.gateway import default_gateway
+            if default_gateway.get_provider("gemini").is_available():
+                self.active_provider = RemoteGUIVisionProvider(gateway=default_gateway)
+            elif HAS_RAPID_OCR:
+                self.active_provider = RapidOCRVisionProvider()
+            else:
+                self.active_provider = UnavailableVisionProvider()
 
         self.ocr_provider = ocr_provider or OCRProvider()
         self._current_observation = None

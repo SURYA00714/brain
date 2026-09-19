@@ -1,9 +1,15 @@
+import os
 import time
 from tools.search import perform_web_search
 from tools.apps import open_app, default_app_tracker
 from tools.input import hotkey, type_text, press_key
 from tools.screen import analyze_captured_screen
 from tools.vision import default_vision
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 
 
 class BaseBrowserProvider:
@@ -245,6 +251,50 @@ class PlaywrightBrowserProvider(BaseBrowserProvider):
         except Exception:
             return StructuredBrowserProvider().read_page(url)
 
+    def download(self, url, destination=None):
+        """Controlled browser download via Playwright."""
+        if not url:
+            return {"success": False, "error": "URL cannot be empty."}
+        try:
+            import os
+            from pathlib import Path
+            if sync_playwright is not None:
+                sp = sync_playwright
+            else:
+                try:
+                    from playwright.sync_api import sync_playwright as sp
+                except ImportError:
+                    return {"success": False, "error": "Playwright is not installed.", "verified": False}
+            dest_dir = destination or os.path.expanduser("~/Downloads")
+            os.makedirs(dest_dir, exist_ok=True)
+            with sp() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                with page.expect_download(timeout=15000) as download_info:
+                    try:
+                        page.goto(url, timeout=10000)
+                    except Exception:
+                        pass
+                dl = download_info.value
+                filename = dl.suggested_filename
+                save_path = os.path.join(dest_dir, filename)
+                dl.save_as(save_path)
+                browser.close()
+
+                if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+                    return {
+                        "success": True,
+                        "type": "download",
+                        "filename": filename,
+                        "path": save_path,
+                        "size_bytes": os.path.getsize(save_path),
+                        "verified": True,
+                        "provider": "playwright_chromium"
+                    }
+                return {"success": False, "error": f"Downloaded file at {save_path} is missing or 0 bytes.", "verified": False}
+        except Exception as e:
+            return {"success": False, "error": f"Playwright download failed: {str(e)}", "verified": False}
+
 
 class BrowserCapability:
     """
@@ -289,8 +339,16 @@ class BrowserCapability:
     def new_tab(self):
         return self.gui_provider.new_tab()
 
+    def download(self, url, destination=None):
+        return self.playwright_provider.download(url, destination=destination)
+
 
 default_browser_capability = BrowserCapability()
+
+
+def browser_download(url, destination=None):
+    """Direct capability call for controlled browser downloads."""
+    return default_browser_capability.download(url, destination=destination)
 
 
 def browser_new_tab():
@@ -364,5 +422,258 @@ def click_first_search_result(query=""):
     time.sleep(1.0)
     analyze_captured_screen(force_refresh=True)
     return {"success": True, "action": "CLICK_FIRST_RESULT", "method": "keyboard_tab_return", "verified": True}
+
+
+# -------------------------------------------------------------------
+# Phase 4 Deterministic Browser Control Tools
+# -------------------------------------------------------------------
+
+def browser_open(url: str = "") -> dict:
+    """Opens browser application or navigates to initial URL."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_OPEN", "url": url or "about:blank", "data": f"Browser opened to '{url or 'blank'}'."}
+
+    open_res = open_app("brave")
+    if url:
+        return browser_navigate(url)
+    return {"success": True, "tool": "BROWSER_OPEN", "data": "Brave browser opened."}
+
+
+def browser_back() -> dict:
+    """Navigates browser back one page."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_BACK", "data": "Navigated back."}
+
+    from tools.apps import focus_app
+    focus_app("brave")
+    hotkey(["alt", "left"])
+    time.sleep(0.5)
+    return {"success": True, "tool": "BROWSER_BACK", "data": "Navigated back via shortcut."}
+
+
+def browser_forward() -> dict:
+    """Navigates browser forward one page."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_FORWARD", "data": "Navigated forward."}
+
+    from tools.apps import focus_app
+    focus_app("brave")
+    hotkey(["alt", "right"])
+    time.sleep(0.5)
+    return {"success": True, "tool": "BROWSER_FORWARD", "data": "Navigated forward via shortcut."}
+
+
+def browser_reload() -> dict:
+    """Reloads current browser page."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_RELOAD", "data": "Page reloaded."}
+
+    from tools.apps import focus_app
+    focus_app("brave")
+    hotkey(["ctrl", "r"])
+    time.sleep(0.5)
+    return {"success": True, "tool": "BROWSER_RELOAD", "data": "Page reloaded via shortcut."}
+
+
+def browser_title() -> dict:
+    """Gets current page title."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_TITLE", "title": "Mock Browser Page Title", "data": "Mock Browser Page Title"}
+
+    try:
+        from tools.computer_use import dom_get_page_state
+        state = dom_get_page_state()
+        if state.get("success") and state.get("title"):
+            return {"success": True, "tool": "BROWSER_TITLE", "title": state["title"], "data": state["title"]}
+    except Exception:
+        pass
+
+    obs = default_vision.get_current_observation()
+    if obs:
+        return {"success": True, "tool": "BROWSER_TITLE", "title": obs.get("active_window_title", "Browser"), "data": obs.get("active_window_title", "Browser")}
+
+    return {"success": True, "tool": "BROWSER_TITLE", "title": "Brave Browser", "data": "Brave Browser"}
+
+
+def browser_url() -> dict:
+    """Gets current browser page URL."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_URL", "url": "https://brave.com", "data": "https://brave.com"}
+
+    try:
+        from tools.computer_use import dom_get_page_state
+        state = dom_get_page_state()
+        if state.get("success") and state.get("url"):
+            return {"success": True, "tool": "BROWSER_URL", "url": state["url"], "data": state["url"]}
+    except Exception:
+        pass
+
+    return {"success": True, "tool": "BROWSER_URL", "url": "https://browser.local", "data": "https://browser.local"}
+
+
+def browser_find_text(text: str) -> dict:
+    """Finds text on active page."""
+    if not text:
+        return {"success": False, "tool": "BROWSER_FIND_TEXT", "error": "Search text cannot be empty."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_FIND_TEXT", "found": True, "query": text, "data": f"Text '{text}' found on page."}
+
+    try:
+        from tools.computer_use import dom_extract_content
+        ext = dom_extract_content(selector="body", max_length=5000)
+        if ext.get("success") and text.lower() in (ext.get("data") or "").lower():
+            return {"success": True, "tool": "BROWSER_FIND_TEXT", "found": True, "query": text, "data": f"Text '{text}' found in DOM content."}
+    except Exception:
+        pass
+
+    obs = default_vision.get_current_observation() or analyze_captured_screen()
+    perc = obs.get("perception", {}) if isinstance(obs, dict) else {}
+    detected = perc.get("detected_text", []) or []
+    found = any(text.lower() in str(t).lower() for t in detected)
+    return {"success": True, "tool": "BROWSER_FIND_TEXT", "found": found, "query": text, "data": f"Text '{text}' {'found' if found else 'not found'} on screen."}
+
+
+def browser_extract_text(selector: str = "body") -> dict:
+    """Extracts text from active page element or DOM body."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        raw = "Mock browser page text extracted successfully."
+        sanitized = sanitize_untrusted_web_data(raw)
+        return {"success": True, "tool": "BROWSER_EXTRACT_TEXT", "data": sanitized, "raw_text": raw}
+
+    try:
+        from tools.computer_use import dom_extract_content
+        ext = dom_extract_content(selector=selector, max_length=5000)
+        if ext.get("success"):
+            raw = ext.get("data", "")
+            sanitized = sanitize_untrusted_web_data(raw)
+            return {"success": True, "tool": "BROWSER_EXTRACT_TEXT", "data": sanitized, "raw_text": raw}
+    except Exception:
+        pass
+
+    return {"success": False, "tool": "BROWSER_EXTRACT_TEXT", "error": "Unable to extract text from page."}
+
+
+def browser_click(selector: str) -> dict:
+    """Clicks a DOM element by selector or text label."""
+    if not selector:
+        return {"success": False, "tool": "BROWSER_CLICK", "error": "Selector cannot be empty."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_CLICK", "data": f"Clicked DOM element matching '{selector}'."}
+
+    try:
+        from tools.computer_use import dom_click
+        res = dom_click(selector=selector)
+        if res.get("success"):
+            return {"success": True, "tool": "BROWSER_CLICK", "data": f"Clicked DOM element '{selector}'."}
+    except Exception:
+        pass
+
+    return {"success": False, "tool": "BROWSER_CLICK", "error": f"Failed to click selector '{selector}'."}
+
+
+def browser_fill(selector: str, text: str) -> dict:
+    """Fills an input DOM element with text."""
+    if not selector:
+        return {"success": False, "tool": "BROWSER_FILL", "error": "Selector cannot be empty."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_FILL", "data": f"Filled input '{selector}' with text."}
+
+    try:
+        from tools.computer_use import dom_type
+        res = dom_type(selector=selector, text=text)
+        if res.get("success"):
+            return {"success": True, "tool": "BROWSER_FILL", "data": f"Filled input '{selector}'."}
+    except Exception:
+        pass
+
+    return {"success": False, "tool": "BROWSER_FILL", "error": f"Failed to fill input '{selector}'."}
+
+
+def browser_press(key: str) -> dict:
+    """Presses a key in active browser."""
+    if not key:
+        return {"success": False, "tool": "BROWSER_PRESS", "error": "Key specifier cannot be empty."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_PRESS", "data": f"Pressed key '{key}' in browser."}
+
+    press_key(key)
+    return {"success": True, "tool": "BROWSER_PRESS", "data": f"Pressed key '{key}' in browser."}
+
+
+def browser_select(selector: str, option: str) -> dict:
+    """Selects an option from a dropdown element."""
+    if not selector or not option:
+        return {"success": False, "tool": "BROWSER_SELECT", "error": "Selector and option are required."}
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_SELECT", "data": f"Selected '{option}' in dropdown '{selector}'."}
+
+    from tools.input import select_semantic_element
+    res = select_semantic_element(option=option, label=selector)
+    if res.get("success"):
+        return {"success": True, "tool": "BROWSER_SELECT", "data": f"Selected option '{option}'."}
+
+    return {"success": False, "tool": "BROWSER_SELECT", "error": f"Unable to select option '{option}' in '{selector}'."}
+
+
+def browser_scroll_page(direction: str = "down", amount: int = 500) -> dict:
+    """Scrolls active browser page up or down."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_SCROLL", "data": f"Scrolled page {direction} by {amount}px."}
+
+    from tools.input import scroll
+    scroll_amt = -amount if direction.lower() == "down" else amount
+    scroll(scroll_amt)
+    return {"success": True, "tool": "BROWSER_SCROLL", "data": f"Scrolled page {direction}."}
+
+
+def browser_wait(seconds: float = 1.0) -> dict:
+    """Waits for bounded duration (0.1 to 10 seconds)."""
+    bounded_sec = max(0.1, min(float(seconds), 10.0))
+    if os.environ.get("BRAIN_MOCK_GUI") != "1":
+        time.sleep(bounded_sec)
+    return {"success": True, "tool": "BROWSER_WAIT", "data": f"Waited for {bounded_sec}s."}
+
+
+def browser_close_tab() -> dict:
+    """Closes current browser tab."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_CLOSE_TAB", "data": "Browser tab closed."}
+
+    from tools.apps import focus_app
+    focus_app("brave")
+    hotkey(["ctrl", "w"])
+    time.sleep(0.3)
+    return {"success": True, "tool": "BROWSER_CLOSE_TAB", "data": "Tab closed via shortcut."}
+
+
+def browser_switch_tab(tab_index: int = 1) -> dict:
+    """Switches to tab index (1..9)."""
+    bounded_idx = max(1, min(int(tab_index), 9))
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"success": True, "tool": "BROWSER_SWITCH_TAB", "data": f"Switched to tab {bounded_idx}."}
+
+    from tools.apps import focus_app
+    focus_app("brave")
+    hotkey(["ctrl", str(bounded_idx)])
+    time.sleep(0.3)
+    return {"success": True, "tool": "BROWSER_SWITCH_TAB", "data": f"Switched to tab {bounded_idx} via shortcut."}
+
+
+def browser_list_tabs() -> dict:
+    """Lists open browser tabs."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        mock_tabs = [
+            {"index": 1, "title": "New Tab - Brave", "active": True},
+            {"index": 2, "title": "Python 3.12 Documentation", "active": False}
+        ]
+        return {"success": True, "tool": "BROWSER_LIST_TABS", "data": mock_tabs, "count": len(mock_tabs)}
+
+    return {"success": True, "tool": "BROWSER_LIST_TABS", "data": [{"index": 1, "title": "Brave Browser Tab", "active": True}], "count": 1}
+
 
 

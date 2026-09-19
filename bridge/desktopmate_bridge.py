@@ -363,6 +363,10 @@ class DesktopMateBridge:
             return {"success": False, "status": ActionStatus.NOT_CONNECTED.value,
                     "error": "Bridge not connected"}
 
+        if not self.capabilities.is_available("play_animation"):
+            return {"success": False, "status": ActionStatus.UNAVAILABLE.value,
+                    "error": "Capability 'play_animation' is not verified/available"}
+
         resp = self.send_and_wait("play_animation", {"name": name}, timeout=timeout)
         if resp:
             if resp.get("success"):

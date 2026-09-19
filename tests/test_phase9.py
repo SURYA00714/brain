@@ -1,3 +1,4 @@
+from models.gateway import ModelResponse
 import unittest
 import time
 from unittest.mock import MagicMock, patch
@@ -98,10 +99,10 @@ class TestPhase9AdaptiveRuntimeAndLatency(unittest.TestCase):
         self.assertTrue(res_struct["success"])
         self.assertEqual(res_struct["provider"], "structured")
 
-    def test_07_fast_route_execution_bypasses_ollama(self):
+    def test_07_fast_route_execution_bypasses_llm(self):
         # Ensure requests.post is NOT called when FastRouter matches
-        with patch("requests.post") as mock_post:
-            mock_post.side_effect = AssertionError("Ollama API should NOT be called for fast-routed intent!")
+        with patch("brain.default_gateway.generate") as mock_post:
+            mock_post.side_effect = AssertionError("LLM API should NOT be called for fast-routed intent!")
             
             # Fast-routed hello
             ans_hello = run_planner_task("hello", quiet=True)

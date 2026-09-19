@@ -1,3 +1,4 @@
+from models.gateway import ModelResponse
 import json
 import unittest
 from unittest.mock import MagicMock, patch
@@ -108,9 +109,9 @@ class TestPhase93MultiStepAndAppLifecycle(unittest.TestCase):
         res = execute_plan(plan, default_registry, PerformanceProfiler(), "Open terminal and type rm -rf /", quiet=True)
         self.assertIn("Safety Block", res)
 
-    @patch("brain.requests.post")
-    def test_06_single_pass_qwen_plan_parsing(self, mock_post):
-        # Qwen returns a single multi-step plan JSON
+    @patch("brain.default_gateway.generate")
+    def test_06_single_pass_llm_plan_parsing(self, mock_post):
+        # LLM returns a single multi-step plan JSON
         mock_plan_json = json.dumps({
             "type": "plan",
             "goal": "Research Python 3.12 features",
@@ -119,8 +120,7 @@ class TestPhase93MultiStepAndAppLifecycle(unittest.TestCase):
                 {"type": "final", "answer": "Python 3.12 introduces improved error messages and per-interpreter GIL."}
             ]
         })
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {"response": mock_plan_json}
+        mock_post.return_value = ModelResponse(model="mock", provider="mock", success=True, text=mock_plan_json)
 
         from tools.registry import ToolRegistry, Tool
         test_reg = ToolRegistry()
@@ -128,7 +128,7 @@ class TestPhase93MultiStepAndAppLifecycle(unittest.TestCase):
 
         res = run_planner_task("Research Python 3.12 features and tell me if I should upgrade", registry=test_reg, quiet=True)
         self.assertIn("Python 3.12", res)
-        # Verify Qwen model was called ONLY ONCE for initial plan generation
+        # Verify LLM model was called ONLY ONCE for initial plan generation
         self.assertEqual(mock_post.call_count, 1)
 
     def test_07_bounded_recovery_state_based(self):

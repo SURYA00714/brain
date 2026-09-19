@@ -1,7 +1,7 @@
 """
 Brain Unified Confirmation Manager (Phase 7).
 Ensures sensitive operations (terminal commands, destructive files, messages, purchases, credentials)
-require explicit, short-lived user confirmation that Qwen cannot self-approve.
+require explicit, short-lived user confirmation that the LLM cannot self-approve.
 """
 
 import time
@@ -86,7 +86,7 @@ class ConfirmationManager:
         return "REQUIRED", req
 
     def approve(self, request_id: str, source: str = "user") -> bool:
-        """Approves a pending request. Source MUST be user (Qwen self-approval is rejected)."""
+        """Approves a pending request. Source MUST be user (LLM self-approval is rejected)."""
         if source != "user":
             return False
 

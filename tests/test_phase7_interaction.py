@@ -90,8 +90,8 @@ class TestPhase7ConfirmationManager(unittest.TestCase):
         status, req = self.mgr.evaluate_action("SUBMIT_FORM", {"form": "test"})
         req_id = req.request_id
 
-        # Qwen / non-user source self-approval MUST be rejected
-        approved_llm = self.mgr.approve(req_id, source="qwen")
+        # LLM / non-user source self-approval MUST be rejected
+        approved_llm = self.mgr.approve(req_id, source="llm")
         self.assertFalse(approved_llm)
 
         # User approval succeeds

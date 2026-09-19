@@ -24,7 +24,7 @@ class TestPhase91RoutingAndAppOwnership(unittest.TestCase):
         self.assertEqual(self.router.route("take a screenshot")["tool"], "SCREENSHOT")
 
     def test_02_fast_router_semantic_boundary_rejections(self):
-        """Queries requiring semantic reasoning, decision-making, or open-ended synthesis MUST NOT bypass Qwen."""
+        """Queries requiring semantic reasoning, decision-making, or open-ended synthesis MUST NOT bypass the LLM."""
         open_ended_queries = [
             "Can you open the browser and find something useful about Python?",
             "Research Python 3.12 and tell me whether I should upgrade.",
@@ -35,7 +35,7 @@ class TestPhase91RoutingAndAppOwnership(unittest.TestCase):
         ]
         for query in open_ended_queries:
             routed = self.router.route(query)
-            self.assertIsNone(routed, f"Query '{query}' incorrectly bypassed Qwen!")
+            self.assertIsNone(routed, f"Query '{query}' incorrectly bypassed the LLM!")
 
     def test_03_app_tracker_scenario_a_brain_launches_and_closes(self):
         """Scenario A: Brain launches process -> Brain closes only that process handle."""

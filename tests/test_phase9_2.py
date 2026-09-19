@@ -1,4 +1,6 @@
 import unittest
+import os
+from unittest.mock import patch
 import time
 from tools.time_tool import get_current_time
 from tools.router import FastRouter, default_router
@@ -61,11 +63,12 @@ class TestPhase92RuntimeFixes(unittest.TestCase):
         self.assertEqual(obs2.get("timestamp"), t1)
 
     def test_07_fast_router_app_response_formatting(self):
-        resp_open = run_planner_task("Open Brave", quiet=True)
-        self.assertIn("Brave is open", resp_open)
+        with patch.dict(os.environ, {"BRAIN_MOCK_GUI": "1"}):
+            resp_open = run_planner_task("Open Brave", quiet=True)
+            self.assertIn("Brave is open", resp_open)
 
-        resp_close = run_planner_task("Close Brave", quiet=True)
-        self.assertIn("Brave has been closed", resp_close)
+            resp_close = run_planner_task("Close Brave", quiet=True)
+            self.assertIn("Brave has been closed", resp_close)
 
     def test_08_semantic_queries_still_bypass_fast_router(self):
         router = FastRouter()

@@ -7,11 +7,8 @@ from tools.registry import ToolRegistry, Tool, default_registry
 
 
 def make_mock_response(text):
-    mock = MagicMock()
-    mock.status_code = 200
-    mock.raise_for_status.return_value = None
-    mock.json.return_value = {"response": text}
-    return mock
+    from models.gateway import ModelResponse
+    return ModelResponse(text=text, model="mock", provider="mock", success=True)
 
 
 class TestPlannerEngine(unittest.TestCase):
@@ -60,7 +57,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(action["arguments"], {"app_name": "brave"})
 
     # 2. Single-Step Task Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_single_step_tool(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "WEB_SEARCH", "arguments": {"query": "Python"}}'),
@@ -72,7 +69,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.mock_web_search.assert_called_once_with("Python")
 
     # 3. Two-Step Task Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_two_step_task(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "FIND_FILES", "arguments": {"pattern": "*.py", "search_root": "Brain"}}'),
@@ -85,7 +82,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.mock_find_files.assert_called_once_with("*.py", "Brain")
 
     # 4. Direct Final Answer Without Tool Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_direct_final_answer(self, mock_brain_post):
         mock_brain_post.return_value = make_mock_response('{"type": "final", "answer": "Linux is an open-source OS kernel."}')
 
@@ -93,7 +90,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(final_ans, "Linux is an open-source OS kernel.")
 
     # 5. Unknown Tool Rejection Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_unknown_tool_rejection(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "MALWARE_TOOL", "arguments": {}}'),
@@ -104,7 +101,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(final_ans, "Handling unknown tool failure.")
 
     # 6. Step Limit (MAX_STEPS = 10) Enforcement Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_max_steps_enforced(self, mock_brain_post):
         responses = [
             make_mock_response(f'{{"type": "tool", "tool": "LIST_FILES", "arguments": {{"target_path": "Brain{i}"}}}}')
@@ -116,7 +113,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertIn("Maximum plan execution limit", final_ans)
 
     # 7. Infinite Loop Prevention on Identical Repeated Actions Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_identical_repeated_action_blocked(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "WEB_SEARCH", "arguments": {"query": "repeat"}}'),
@@ -127,7 +124,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertIn("Repeated identical action", final_ans)
 
     # 8. Filesystem Safety Enforcement in Planner Loop Test
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_planner_unsafe_path_blocked(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "READ_TEXT_FILE", "arguments": {"filepath": "/etc/passwd"}}'),
@@ -138,7 +135,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(final_ans, "I could not access that file due to safety controls.")
 
     # 9. Regression Test: "hello" does not execute ANALYZE_SCREEN or GUI tools
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_hello_does_not_trigger_analyze_screen(self, mock_brain_post):
         mock_brain_post.return_value = make_mock_response('{"type": "final", "answer": "Hello! How can I help you today?"}')
         ans = run_planner_task("hello", registry=self.test_registry, quiet=True)
@@ -164,7 +161,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertNotIn("image_path", prompt.split("Previous Step Execution History:")[1])
 
     # 11. Regression Test: WEB_SEARCH -> FINAL answer without repeating WEB_SEARCH
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_web_search_produces_final_answer_without_repeat(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "WEB_SEARCH", "arguments": {"query": "latest Python 3.12 features"}}'),
@@ -175,7 +172,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(self.mock_web_search.call_count, 1)
 
     # 12. Regression Test: LIST_FILES request -> LIST_FILES -> FINAL answer
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_list_files_produces_final_answer_without_find_files(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": "Brain"}}'),
@@ -187,7 +184,7 @@ class TestPlannerEngine(unittest.TestCase):
         self.assertEqual(self.mock_find_files.call_count, 0)
 
     # 13. Regression Test: FIND_FILES remains available for pattern search requests
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_find_files_available_for_pattern_search(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "FIND_FILES", "arguments": {"pattern": "*.py", "search_root": "Brain"}}'),
@@ -215,14 +212,14 @@ class TestPlannerEngine(unittest.TestCase):
             "timestamp": 1000
         }
         # Run new task "hello" which clears observation at entry
-        with patch("brain.requests.post") as mock_post:
+        with patch("brain.default_gateway.generate") as mock_post:
             mock_post.return_value = make_mock_response('{"type": "final", "answer": "Hello!"}')
             ans = run_planner_task("hello", registry=self.test_registry, quiet=True)
             self.assertTrue(ans.startswith("Hello"))
             self.assertIsNone(default_vision.get_current_observation())
 
     # 16. Regression Test: "List files in my Brain project" prefers LIST_FILES over FIND_FILES
-    @patch("brain.requests.post")
+    @patch("brain.default_gateway.generate")
     def test_list_files_in_my_brain_project_prefers_list_files(self, mock_brain_post):
         mock_brain_post.side_effect = [
             make_mock_response('{"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": "Brain"}}'),

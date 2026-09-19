@@ -13,6 +13,7 @@ proc = subprocess.Popen(["/home/jai/Downloads/Brain/launch_desktopmate.sh"])
 time.sleep(10) # wait for Unity and Proton to load
 
 print("Taking screenshot...")
-os.system("xwd -root -out desktop_transparent.xwd")
-os.system("convert desktop_transparent.xwd desktop_transparent_live.png")
+from PIL import ImageGrab
+img = ImageGrab.grab()
+img.save('desktop_transparent_live.png')
 print("Screenshot taken.")

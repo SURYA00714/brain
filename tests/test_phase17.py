@@ -1,3 +1,4 @@
+import os
 import time
 import unittest
 from unittest.mock import patch, MagicMock
@@ -130,11 +131,12 @@ class TestPhase17GenuineIntelligence(unittest.TestCase):
 
     def test_06_contextual_reference_resolution(self):
         """Resolves conversational pronouns ('close it', 'focus it') using short-term memory."""
-        # Turn 1: Open Brave
-        run_planner_task("open brave", quiet=True)
-        # Turn 2: Close it (should resolve to "close brave")
-        res = run_planner_task("close it", quiet=True)
-        self.assertIn("Brave", res)
+        with patch.dict(os.environ, {"BRAIN_MOCK_GUI": "1"}):
+            # Turn 1: Open Brave
+            run_planner_task("open brave", quiet=True)
+            # Turn 2: Close it (should resolve to "close brave")
+            res = run_planner_task("close it", quiet=True)
+            self.assertIn("Brave", res)
 
     def test_07_goal_state_lifecycle_management(self):
         """Explicit GoalState tracks lifecycle from PENDING -> RUNNING -> COMPLETED."""

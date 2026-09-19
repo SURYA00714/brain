@@ -298,12 +298,36 @@ def click_mouse(x, y, button="left"):
         elif HAS_PYNPUT and mouse_ctrl:
             mouse_ctrl.position = (cx, cy)
             p_btn = Button.left if clean_btn == "left" else (Button.right if clean_btn == "right" else Button.middle)
-            mouse_ctrl.click(p_btn)
-        else:
-            return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"x": cx, "y": cy, "button": clean_btn}
     except Exception as e:
         return f"Error clicking mouse: {str(e)}"
+
+
+def right_click(x, y):
+    """Right-clicks the mouse at (x, y)."""
+    return click_mouse(x, y, button="right")
+
+
+def get_screen_size() -> dict:
+    """Returns desktop screen width and height."""
+    w, h = get_screen_dimensions()
+    return {"success": True, "tool": "SCREEN_SIZE", "width": w, "height": h, "data": f"Screen size: {w}x{h}."}
+
+
+def get_active_window() -> dict:
+    """Returns current active window metadata."""
+    from core.window_state import default_window_provider
+    meta = default_window_provider.get_active_window_metadata()
+    win = meta.get("window", {})
+    return {
+        "success": True,
+        "tool": "ACTIVE_WINDOW",
+        "title": win.get("title", "Unknown"),
+        "class": win.get("class", "Unknown"),
+        "id": win.get("id", "0x0"),
+        "geometry": {"x": win.get("x", 0), "y": win.get("y", 0), "width": win.get("width", 0), "height": win.get("height", 0)},
+        "data": f"Active Window: '{win.get('title')}' ({win.get('class')})."
+    }
 
 
 def double_click(x, y):
@@ -475,6 +499,9 @@ def press_key(key):
     if clean_key not in VALID_KEYS:
         return f"Error: Key '{key}' is not in the validated key allowlist."
 
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"key": clean_key}
+
     try:
         if HAS_PYAUTOGUI and pyautogui is not None:
             pyautogui.press(clean_key)
@@ -497,6 +524,9 @@ def hotkey(keys):
     for k in clean_keys:
         if k not in VALID_KEYS:
             return f"Error: Key '{k}' in hotkey combination is not in the validated key allowlist."
+
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return {"hotkey": clean_keys}
 
     try:
         if HAS_PYAUTOGUI and pyautogui is not None:

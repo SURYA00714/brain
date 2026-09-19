@@ -35,7 +35,7 @@ class WorldState:
     current_task: Optional[str] = None
     last_observation: Optional[Dict[str, Any]] = None
     last_verification: str = "UNKNOWN"    # CONFIRMED, LIKELY, UNKNOWN, FAILED
-    model_provider: str = "qwen2.5:3b"
+    model_provider: str = "groq"
     desktop_mate_status: str = "UNAVAILABLE" # AVAILABLE, UNAVAILABLE, DISCONNECTED
     voice_status: str = "UNAVAILABLE"        # AVAILABLE, UNAVAILABLE
     browser_status: str = "IDLE"             # IDLE, ACTIVE, CLOSED
