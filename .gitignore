@@ -13,3 +13,5 @@ models/
 
 desktopmate/
 *.log
+3D MODEL/
+cleanup_report.txt

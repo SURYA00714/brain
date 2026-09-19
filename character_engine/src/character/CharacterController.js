@@ -40,6 +40,7 @@ export class CharacterController {
     this.creatures = new CreatureEngine(this);
     this.voice = new VoiceController(this.vrm);
     this.idleBehavior = new IdleBehaviorEngine(this);
+    this.behavior = this.idleBehavior;
     this.bridge = new BrainBridge(this);
 
     this._mouseMode = 'LOOK_ONLY';
@@ -249,10 +250,13 @@ export class CharacterController {
         }, 400);
       }
 
-      // 5. Animation update
+      // 5. Autonomous Behavior Engine update (Spec Section 37)
+      this.idleBehavior.update(dt);
+
+      // 6. Animation update
       this.animation.update(dt);
 
-      // 6. VRM update (spring bones etc)
+      // 7. VRM update (spring bones etc)
       this.vrm.update(dt);
     } catch (e) {
       console.error('[AO] Update error:', e);
@@ -275,12 +279,29 @@ export class CharacterController {
         [STATE.RETURNING_HOME]: 'walk',
         [STATE.FOLLOWING_MOUSE]: 'idle',
         [STATE.INTERACTING]: 'pet',
+        [STATE.THINKING]: 'think',
+        [STATE.CURIOUS]: 'confused',
+        [STATE.STRETCHING]: 'stretch',
+        [STATE.YAWNING]: 'yawn',
+        [STATE.SLEEPY]: 'sleep',
+        [STATE.RESTING]: 'sit',
+        [STATE.SHY_REACTION]: 'shy',
+        [STATE.HAPPY_REACTION]: 'bounce',
+        [STATE.CONFUSED_REACTION]: 'confused',
+        [STATE.SURPRISED_REACTION]: 'wave',
+        [STATE.PLAYFUL]: 'bounce',
+        [STATE.RETURN_TO_IDLE]: 'idle',
       };
       const anim = animMap[next];
       if (anim) this.animation.play(anim);
 
       // Stop movement on static states
-      if ([STATE.IDLE, STATE.SITTING, STATE.SLEEPING, STATE.READING, STATE.LANDING, STATE.DISABLED, STATE.INTERACTING].includes(next)) {
+      if ([
+        STATE.IDLE, STATE.SITTING, STATE.SLEEPING, STATE.READING, STATE.LANDING,
+        STATE.DISABLED, STATE.INTERACTING, STATE.THINKING, STATE.CURIOUS,
+        STATE.STRETCHING, STATE.YAWNING, STATE.SLEEPY, STATE.RESTING,
+        STATE.SHY_REACTION, STATE.RETURN_TO_IDLE
+      ].includes(next)) {
         this.movement.stop();
       }
 

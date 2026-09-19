@@ -1,162 +1,94 @@
 import { CONFIG } from '../config.js';
 import { STATE, PRIORITY } from './CharacterState.js';
+import { ATTENTION_TARGET } from './LookAtController.js';
 import { UtilitySelector } from '../mind/UtilitySelector.js';
 
 /**
- * ActivityRegistry — manages logical human-like activities for Ao.
- * Every activity has:
- *  - Conditions (energy, boredom, time, location)
- *  - Preparation / Path (e.g. walk home, sit down)
- *  - Action phases (entry, active, reaction)
- *  - Exit transition / Return path
- *  - Cooldown to prevent repetitive behavior spam
+ * ActivityRegistry — Modular behavior catalog for Ao.
+ * References:
+ * - OpenPet: action definition contract with conditions, execution phases, and cleanup.
+ * - Liqu: procedural anime actions with fluid durations and natural gestures.
+ * - Desktop Virtual Buddy: priority-driven state transitions and cooldown prevention.
  */
-
 export const ACTIVITIES = [
   {
-    id: 'read_book',
-    name: 'Reading Book',
-    duration: [15000, 30000],
-    cooldownMs: 60000,
+    id: 'wave_hello',
+    name: 'Cheerful Wave',
+    duration: [2800, 3800],
+    cooldownMs: 15000,
+    lastRun: 0,
+    priority: 150,
+    requiresHome: false,
+    condition: (emo) => emo.happiness > 0.30 || emo.socialNeed > 0.20,
+    run: async (char) => {
+      char.state.transition(STATE.PLAYFUL, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('happy');
+      char.playAnimation('wave');
+      char.lookAt.setAttention(ATTENTION_TARGET.USER, 3.5, 0.9);
+      await char.wait(3200);
+    },
+    exit: (char) => {
+      char.idle();
+      char.emotion.onUserInteraction();
+    }
+  },
+  {
+    id: 'happy_bounce',
+    name: 'Joyful Bounce',
+    duration: [2200, 3200],
+    cooldownMs: 20000,
+    lastRun: 0,
+    priority: 140,
+    requiresHome: false,
+    condition: (emo) => emo.happiness > 0.50 && emo.energy > 0.35,
+    run: async (char) => {
+      char.state.transition(STATE.HAPPY_REACTION, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('happy');
+      char.playAnimation('bounce');
+      char.lookAt.setAttention(ATTENTION_TARGET.FORWARD, 2.5, 0.8);
+      await char.wait(2600);
+    },
+    exit: (char) => {
+      char.idle();
+      char.emotion.onFunEvent();
+    }
+  },
+  {
+    id: 'stretch_body',
+    name: 'Morning Stretch',
+    duration: [3000, 4200],
+    cooldownMs: 25000,
     lastRun: 0,
     priority: 120,
-    requiresHome: true,
-    condition: (emo, dayNight) => emo.energy > 25 && emo.boredom > 15 && !dayNight?.isNight,
-    run: async (char) => {
-      // 1. Move to home if not already there
-      char.goHome();
-      await char.waitForArrival(10000);
-      // 2. Sit down
-      char.sit();
-      await char.wait(1200);
-      // 3. Open book & read
-      char.state.transition(STATE.READING, PRIORITY.ACTIVITY);
-      char.expression.setEmotion('neutral');
-      char.playAnimation('read');
-      // 4. Halfway page turn or glance
-      await char.wait(8000);
-      if (char.state.state === STATE.READING) {
-        char.expression.setEmotion('happy');
-      }
-    },
-    exit: (char) => {
-      char.idle();
-      char.emotion.onActivity();
-    }
-  },
-  {
-    id: 'drink_tea',
-    name: 'Drinking Tea',
-    duration: [8000, 14000],
-    cooldownMs: 90000,
-    lastRun: 0,
-    priority: 100,
-    requiresHome: true,
-    condition: (emo) => emo.energy < 75 && emo.boredom > 10,
-    run: async (char) => {
-      char.goHome();
-      await char.waitForArrival(8000);
-      char.playAnimation('drink');
-      await char.wait(3000);
-      char.expression.setEmotion('happy');
-      await char.wait(4000);
-      char.emotion.boostEnergy(15);
-    },
-    exit: (char) => {
-      char.idle();
-      char.expression.setEmotion('neutral');
-    }
-  },
-  {
-    id: 'check_phone',
-    name: 'Checking Phone',
-    duration: [6000, 12000],
-    cooldownMs: 45000,
-    lastRun: 0,
-    priority: 80,
     requiresHome: false,
-    condition: (emo) => emo.boredom > 35,
+    condition: (emo) => emo.boredom > 0.20 || emo.sleepiness > 0.25,
     run: async (char) => {
-      char.movement.stop();
-      char.playAnimation('phone');
-      await char.wait(2500);
+      char.state.transition(STATE.STRETCHING, PRIORITY.AUTONOMOUS);
       char.expression.setEmotion('happy');
+      char.playAnimation('stretch');
+      char.lookAt.setAttention(ATTENTION_TARGET.UP, 3.5, 0.7);
       await char.wait(3500);
-      char.expression.setEmotion('surprised');
     },
     exit: (char) => {
       char.idle();
-      char.expression.setEmotion('neutral');
       char.emotion.onActivity();
     }
   },
   {
     id: 'listen_music',
-    name: 'Listening to Music',
-    duration: [12000, 24000],
-    cooldownMs: 80000,
+    name: 'Grooving to Music',
+    duration: [4000, 6000],
+    cooldownMs: 30000,
     lastRun: 0,
-    priority: 90,
+    priority: 130,
     requiresHome: false,
-    condition: (emo) => emo.happiness > 40 && emo.boredom > 20,
+    condition: (emo) => emo.happiness > 0.35,
     run: async (char) => {
-      char.playAnimation('music');
+      char.state.transition(STATE.PLAYFUL, PRIORITY.AUTONOMOUS);
       char.expression.setEmotion('happy');
-      await char.wait(8000);
-    },
-    exit: (char) => {
-      char.idle();
-      char.expression.setEmotion('neutral');
-    }
-  },
-  {
-    id: 'stretch_and_yawn',
-    name: 'Stretching & Yawning',
-    duration: [5000, 8000],
-    cooldownMs: 40000,
-    lastRun: 0,
-    priority: 110,
-    requiresHome: false,
-    condition: (emo) => emo.sleepiness > 40 || emo.boredom > 50,
-    run: async (char) => {
-      char.playAnimation('stretch');
-      await char.wait(3000);
-      char.playAnimation('yawn');
-      char.expression.setEmotion('sleepy');
-      await char.wait(3000);
-    },
-    exit: (char) => {
-      char.idle();
-      char.expression.setEmotion('neutral');
-    }
-  },
-  {
-    id: 'wander_explore',
-    name: 'Wandering Desktop',
-    duration: [10000, 18000],
-    cooldownMs: 50000,
-    lastRun: 0,
-    priority: 70,
-    requiresHome: false,
-    condition: (emo) => emo.energy > 45 && emo.boredom > 30,
-    run: async (char) => {
-      // Pick a logical target on the desktop away from current position
-      const screenW = char.desktop.screenW;
-      const minX = 150;
-      const maxX = screenW - 150;
-      const currentX = char.movement.desktopX;
-      // Target at least 250px away
-      let targetX = minX + Math.random() * (maxX - minX);
-      if (Math.abs(targetX - currentX) < 200) {
-        targetX = currentX > screenW / 2 ? minX + 100 : maxX - 100;
-      }
-      char.walkTo(targetX);
-      await char.waitForArrival(12000);
-      // Look around curiously
-      char.idle();
-      char.playAnimation('idle');
-      char.expression.setEmotion('neutral');
-      await char.wait(3000);
+      char.playAnimation('music');
+      char.lookAt.setAttention(ATTENTION_TARGET.FORWARD, 4.5, 0.6);
+      await char.wait(4500);
     },
     exit: (char) => {
       char.idle();
@@ -164,47 +96,135 @@ export const ACTIVITIES = [
     }
   },
   {
-    id: 'sofa_rest',
-    name: 'Resting on Sofa',
-    duration: [15000, 30000],
-    cooldownMs: 60000,
+    id: 'check_phone',
+    name: 'Checking Phone',
+    duration: [3500, 5000],
+    cooldownMs: 28000,
     lastRun: 0,
-    priority: 140,
-    requiresHome: true,
-    condition: (emo) => emo.energy < 40 || emo.sleepiness > 60,
+    priority: 110,
+    requiresHome: false,
+    condition: (emo) => emo.boredom > 0.20 || emo.socialNeed > 0.30,
     run: async (char) => {
-      char.goHome();
-      await char.waitForArrival(8000);
-      char.sit();
-      char.expression.setEmotion('sleepy');
-      char.emotion.onRest();
-      await char.wait(10000);
+      char.movement.stop();
+      char.playAnimation('phone');
+      char.expression.setEmotion('happy');
+      char.lookAt.setAttention(ATTENTION_TARGET.DOWN, 4.0, 0.7);
+      await char.wait(2200);
+      char.expression.setEmotion('surprised');
+      await char.wait(1800);
     },
     exit: (char) => {
       char.idle();
-      char.expression.setEmotion('neutral');
+      char.emotion.onActivity();
     }
   },
   {
-    id: 'deep_sleep',
-    name: 'Deep Sleep',
-    duration: [40000, 90000],
-    cooldownMs: 120000,
+    id: 'think_cute',
+    name: 'Thinking Pose',
+    duration: [2800, 3800],
+    cooldownMs: 18000,
     lastRun: 0,
-    priority: 250,
-    requiresHome: true,
-    condition: (emo, dayNight) => emo.shouldSleep || (dayNight?.isNight && emo.energy < 50),
+    priority: 115,
+    requiresHome: false,
+    condition: (emo) => emo.curiosity > 0.30,
     run: async (char) => {
-      char.goHome();
-      await char.waitForArrival(8000);
-      char.sleep();
-      char.emotion.onSleep();
-      await char.wait(20000);
+      char.state.transition(STATE.THINKING, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('curious');
+      char.playAnimation('think');
+      char.lookAt.setAttention(ATTENTION_TARGET.UP, 3.2, 0.85);
+      await char.wait(3000);
     },
     exit: (char) => {
-      if (char.state.state === STATE.SLEEPING) {
-        char.wake();
-      }
+      char.idle();
+    }
+  },
+  {
+    id: 'curious_look',
+    name: 'Curious Glance',
+    duration: [2500, 3500],
+    cooldownMs: 16000,
+    lastRun: 0,
+    priority: 125,
+    requiresHome: false,
+    condition: (emo) => emo.curiosity > 0.40,
+    run: async (char) => {
+      char.state.transition(STATE.CURIOUS, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('curious');
+      char.playAnimation('confused');
+      char.lookAt.setAttention(ATTENTION_TARGET.RIGHT, 3.0, 0.85);
+      await char.wait(2800);
+    },
+    exit: (char) => {
+      char.idle();
+    }
+  },
+  {
+    id: 'shy_fidget',
+    name: 'Shy Blushing',
+    duration: [2500, 3500],
+    cooldownMs: 25000,
+    lastRun: 0,
+    priority: 105,
+    requiresHome: false,
+    condition: (emo) => emo.socialNeed > 0.35 || emo.affection > 0.30,
+    run: async (char) => {
+      char.state.transition(STATE.SHY_REACTION, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('embarrassed');
+      char.playAnimation('shy');
+      char.lookAt.setAttention(ATTENTION_TARGET.DOWN, 3.0, 0.7);
+      await char.wait(2800);
+    },
+    exit: (char) => {
+      char.idle();
+    }
+  },
+  {
+    id: 'yawn_sleepy',
+    name: 'Sleepy Yawn',
+    duration: [2800, 3800],
+    cooldownMs: 35000,
+    lastRun: 0,
+    priority: 95,
+    requiresHome: false,
+    condition: (emo) => emo.sleepiness > 0.25 || emo.energy < 0.60,
+    run: async (char) => {
+      char.state.transition(STATE.YAWNING, PRIORITY.AUTONOMOUS);
+      char.expression.setEmotion('sleepy');
+      char.playAnimation('yawn');
+      char.lookAt.setAttention(ATTENTION_TARGET.FORWARD, 3.2, 0.5);
+      await char.wait(3200);
+    },
+    exit: (char) => {
+      char.idle();
+      char.emotion.onRest();
+    }
+  },
+  {
+    id: 'desktop_stroll',
+    name: 'Desktop Stroll',
+    duration: [4000, 6500],
+    cooldownMs: 30000,
+    lastRun: 0,
+    priority: 110,
+    requiresHome: false,
+    condition: (emo) => emo.energy > 0.40 && emo.boredom > 0.15,
+    run: async (char) => {
+      const screenW = char.desktop.screenW;
+      const currentX = char.movement.desktopX;
+      // Stroll 120-250px away
+      const direction = (currentX > screenW - 250) ? -1 : (currentX < 250 ? 1 : (Math.random() > 0.5 ? 1 : -1));
+      const distance = 120 + Math.random() * 150;
+      const targetX = Math.max(80, Math.min(screenW - 80, currentX + direction * distance));
+
+      char.walkTo(targetX);
+      char.expression.setEmotion('happy');
+      char.lookAt.setAttention(direction > 0 ? ATTENTION_TARGET.RIGHT : ATTENTION_TARGET.LEFT, 4.5);
+      await char.waitForArrival(6000);
+      char.idle();
+    },
+    exit: (char) => {
+      char.idle();
+      char.emotion.onActivity();
     }
   }
 ];
@@ -221,9 +241,10 @@ export class ActivityRegistry {
 
   get currentActivity() { return this._currentActivity; }
   get isActive() { return this._currentActivity !== null; }
+  get utility() { return this._utility; }
 
   /**
-   * Pick suitable activity based on Utility AI scoring and cooldowns.
+   * Pick best activity based on Utility AI scoring and cooldowns (Vela & DVB style).
    */
   pickActivity(emotionalState, dayNight, context = {}) {
     const now = Date.now();
@@ -235,12 +256,11 @@ export class ActivityRegistry {
     if (candidates.length === 0) return null;
 
     // Use mathematical Utility AI evaluation
-    const selected = this._utility.evaluate(candidates, emotionalState, {
+    return this._utility.evaluate(candidates, emotionalState, {
       isNight: dayNight?.isNight,
       activeAppCategory: context.activeAppCategory,
+      userActive: context.userActive,
     });
-
-    return selected || candidates[0];
   }
 
   /**
@@ -256,10 +276,10 @@ export class ActivityRegistry {
     const [minDur, maxDur] = activity.duration;
     const duration = minDur + Math.random() * (maxDur - minDur);
 
-    // Safety timeout to guarantee activity always ends
+    // Failsafe timeout to guarantee activity always finishes
     this._activityTimeout = setTimeout(() => {
       this.finish();
-    }, duration);
+    }, duration + 1000);
 
     try {
       if (activity.run) {
@@ -268,7 +288,6 @@ export class ActivityRegistry {
     } catch (err) {
       console.warn(`[ACTIVITY] ${activity.name} interrupted or failed:`, err);
     } finally {
-      // Natural finish if not already stopped
       if (!this._aborted) {
         this.finish();
       }

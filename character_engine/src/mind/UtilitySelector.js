@@ -1,63 +1,101 @@
 /**
- * UtilitySelector — Mathematical Utility AI decision engine.
+ * UtilitySelector — Mathematical Utility AI decision engine for Ao.
  *
- * Evaluates candidates based on:
- * - Internal mind state: energy, boredom, sleepiness, curiosity, playfulness
- * - Contextual cues: day/night, active application
- * - Cooldowns & repetition penalties
- *
- * Returns scored behavior with highest utility value.
+ * References:
+ * - Vela: Personality dimensions (cute, curious, playful, mischievous, calm, social, lazy)
+ *         and normalized needs driving behavior.
+ * - Desktop Virtual Buddy: Recency penalty buffer and utility thresholding.
  */
 export class UtilitySelector {
   constructor() {
     this._recentActions = [];
-    this._maxHistory = 5;
+    this._maxHistory = 6;
   }
 
-  /**
-   * Score activities and pick the highest utility candidate.
-   */
-  evaluate(activities, mindState, context = {}) {
-    const scored = activities.map(act => {
-      let score = 0;
+  get recentHistory() { return [...this._recentActions]; }
 
-      // 1. Base emotional motivations
-      if (act.id === 'deep_sleep' || act.id === 'sofa_rest') {
-        score = (mindState.sleepiness * 0.6) + ((100 - mindState.energy) * 0.4);
-        if (context.isNight) score += 30;
-      } else if (act.id === 'read_book') {
-        score = (mindState.boredom * 0.4) + (mindState.energy * 0.3) + (mindState.curiosity * 0.3);
-        if (context.activeAppCategory === 'CODING') score += 20; // Reading near coding
-      } else if (act.id === 'drink_tea') {
-        score = ((100 - mindState.energy) * 0.5) + (mindState.boredom * 0.3);
-      } else if (act.id === 'check_phone') {
-        score = (mindState.boredom * 0.6) + (mindState.playfulness * 0.2);
-      } else if (act.id === 'listen_music') {
-        score = (mindState.happiness * 0.4) + (mindState.boredom * 0.4);
-      } else if (act.id === 'stretch_and_yawn') {
-        score = (mindState.sleepiness * 0.4) + (mindState.boredom * 0.4);
-      } else if (act.id === 'wander_explore') {
-        score = (mindState.curiosity * 0.5) + (mindState.energy * 0.3) + (mindState.playfulness * 0.2);
+  /**
+   * Score candidates and select best behavior based on Vela-style personality and needs.
+   */
+  evaluate(candidates, mindState, context = {}) {
+    if (!candidates || candidates.length === 0) return null;
+
+    const p = mindState.personality || {
+      cute: 0.70, curious: 0.80, playful: 0.65, mischievous: 0.45,
+      calm: 0.60, social: 0.55, lazy: 0.30, dramatic: 0.25,
+    };
+
+    const scored = candidates.map(item => {
+      let score = 30; // Base baseline
+      const id = item.id;
+
+      switch (id) {
+        case 'wave_hello':
+          score = (mindState.socialNeed * 40) + (mindState.happiness * 35) + (p.cute * 30);
+          if (context.userActive) score += 20; // Greet user when user is active
+          break;
+
+        case 'happy_bounce':
+          score = (mindState.happiness * 45) + (mindState.energy * 35) + (p.playful * 30);
+          break;
+
+        case 'stretch_body':
+          score = (mindState.boredom * 35) + (mindState.sleepiness * 30) + (p.lazy * 20);
+          break;
+
+        case 'listen_music':
+          score = (mindState.happiness * 35) + (p.playful * 30) + (mindState.boredom * 20);
+          break;
+
+        case 'check_phone':
+          score = (mindState.boredom * 40) + (mindState.socialNeed * 35) + (p.mischievous * 20);
+          break;
+
+        case 'think_cute':
+          score = (mindState.curiosity * 45) + (p.calm * 25) + (p.curious * 25);
+          break;
+
+        case 'curious_look':
+          score = (mindState.curiosity * 50) + (p.curious * 30);
+          break;
+
+        case 'shy_fidget':
+          score = (mindState.socialNeed * 30) + (mindState.affection * 30) + (p.cute * 30);
+          break;
+
+        case 'yawn_sleepy':
+          score = (mindState.sleepiness * 55) + ((1.0 - mindState.energy) * 35);
+          if (context.isNight) score += 25;
+          break;
+
+        case 'desktop_stroll':
+          score = (mindState.energy * 40) + (mindState.curiosity * 35) + (p.playful * 20);
+          if (context.userActive) score -= 15; // Less strolling when user is actively working
+          break;
+
+        default:
+          score = 25;
+          break;
       }
 
-      // 2. Penalize recent actions to prevent repetitive behavior loops
-      const repeatIndex = this._recentActions.indexOf(act.id);
+      // Repetition penalty (Desktop Virtual Buddy pattern)
+      const repeatIndex = this._recentActions.indexOf(id);
       if (repeatIndex !== -1) {
-        // More recent = heavier penalty
-        const recencyPenalty = (this._maxHistory - repeatIndex) * 15;
-        score -= recencyPenalty;
+        const penalty = (this._maxHistory - repeatIndex) * 20;
+        score -= penalty;
       }
 
       return {
-        activity: act,
-        score: Math.max(0, score),
+        item,
+        score: Math.max(5, score),
       };
     });
 
     // Sort descending by score
     scored.sort((a, b) => b.score - a.score);
 
-    const winner = scored[0]?.score > 15 ? scored[0].activity : null;
+    // Pick best scoring candidate
+    const winner = scored[0] ? scored[0].item : null;
     if (winner) {
       this._recordAction(winner.id);
     }

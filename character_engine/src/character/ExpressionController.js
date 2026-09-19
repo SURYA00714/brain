@@ -14,6 +14,7 @@ export class ExpressionController {
       happy: 'happy', sad: 'sad', angry: 'angry',
       surprised: 'surprised', sleepy: 'relaxed',
       neutral: 'neutral', excited: 'happy', confused: 'neutral',
+      embarrassed: 'relaxed', curious: 'surprised',
     };
   }
 
@@ -35,15 +36,32 @@ export class ExpressionController {
   }
 
   _scheduleBlink() {
-    const delay = CONFIG.behavior.blinkIntervalMs + Math.random() * CONFIG.behavior.blinkVarianceMs;
+    const delay = (CONFIG.behavior?.blinkIntervalMs || 3500) + Math.random() * (CONFIG.behavior?.blinkVarianceMs || 2500);
     this._blinkTimer = setTimeout(() => {
       try {
         if (!this._vrm.loaded) { this._scheduleBlink(); return; }
+
+        // Spec Section 12: Natural blink with occasional double-blink (15% chance)
+        const isDouble = Math.random() < 0.15;
         this._vrm.setExpression('blink', 1.0);
+
         setTimeout(() => {
-          try { this._vrm.setExpression('blink', 0); } catch (e) { /* ok */ }
-          this._scheduleBlink();
-        }, 120);
+          try { this._vrm.setExpression('blink', 0); } catch (e) {}
+
+          if (isDouble) {
+            setTimeout(() => {
+              try {
+                this._vrm.setExpression('blink', 1.0);
+                setTimeout(() => {
+                  try { this._vrm.setExpression('blink', 0); } catch (e) {}
+                  this._scheduleBlink();
+                }, 100);
+              } catch (e) { this._scheduleBlink(); }
+            }, 80);
+          } else {
+            this._scheduleBlink();
+          }
+        }, 110);
       } catch (e) { this._scheduleBlink(); }
     }, delay);
   }
