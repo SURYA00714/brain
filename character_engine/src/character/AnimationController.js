@@ -38,6 +38,17 @@ export class AnimationController {
     this._blendDuration = customBlendDuration !== null ? customBlendDuration : (meta.blendDuration || 0.4);
     this._blendTimer = 0;
     this._blendWeight = 0;
+
+    // If metadata points to a VRMA asset, trigger VRMA playback on VRMAdapter
+    if (meta.vrmaPath) {
+      this._vrm.loadVRMA(meta.vrmaPath).then(clip => {
+        if (clip && this._currentAnim === name) {
+          this._vrm.playVRMA(clip, meta.loop, this._blendDuration);
+        }
+      });
+    } else {
+      this._vrm.stopVRMA(this._blendDuration);
+    }
   }
 
   stop() {
@@ -61,10 +72,16 @@ export class AnimationController {
     }
 
     try {
-      // 1. LAYER 0 & 1: Evaluate Active Animation
-      this._evaluateAnimation(this._currentAnim, delta);
+      // 0. Update VRMA animation tracks via AnimationMixer
+      this._vrm.updateMixer(delta);
 
-      // 2. LAYER 2: Procedural Micro-Motion (Pure Thoracic Breathing)
+      // 1. LAYER 0 & 1: Evaluate Active Procedural Animation (if active animation is not VRMA)
+      const meta = getAnimationMetadata(this._currentAnim);
+      if (!meta.vrmaPath) {
+        this._evaluateAnimation(this._currentAnim, delta);
+      }
+
+      // 2. LAYER 2: Procedural Micro-Motion (Liqu-derived multi-phase breathing, weight shift, follow-through)
       this._applyMicroMotion(delta);
 
       // 3. PHYSICAL VALIDATOR: Clamp all joints to anatomical limits
@@ -151,13 +168,44 @@ export class AnimationController {
     }
   }
 
-  // === LAYER 2: PROCEDURAL MICRO-MOTION (STANDING STRAIGHT) ===
+  // === LAYER 2: PROCEDURAL MICRO-MOTION (LIQU-DERIVED PROCEDURAL DYNAMICS) ===
   _applyMicroMotion(delta) {
-    // Pure gentle thoracic breathing expansion on X axis only (no sideways sway)
-    const breathCycle = Math.sin(this._time * 1.5);
+    const t = this._time;
+
+    // A. Multi-frequency thoracic breathing (Liqu reference)
+    // Non-repeating multi-frequency sine wave creates natural non-mechanical respiratory rhythm
+    const breath = (Math.sin(t * 1.1) + Math.sin(t * 1.7 + 0.6) * 0.35) * 0.010;
     const chest = this._vrm.getBone('chest') || this._vrm.getBone('spine');
     if (chest) {
-      chest.rotation.x += breathCycle * 0.008;
+      chest.rotation.x += breath * 0.7;
+    }
+
+    // B. Subtle weight shift & center-of-mass drift during standing idle
+    if (this._currentAnim === 'idle' || this._currentAnim.includes('idle')) {
+      const weight = Math.sin(t * 0.20) * 0.025;      // slow lateral center-of-mass shift
+      const weightFast = Math.sin(t * 0.45 + 0.8) * 0.008;
+
+      const hips = this._vrm.getBone('hips');
+      if (hips) {
+        // Micro tilt of pelvis without breaking forward facing
+        hips.rotation.z += weight * 0.4;
+      }
+
+      // Knee micro-flexion responds naturally to weight distribution
+      const llk = this._vrm.getBone('leftLowerLeg');
+      const rlk = this._vrm.getBone('rightLowerLeg');
+      if (llk && weight < 0) {
+        llk.rotation.x += Math.max(0, -weight) * 0.15;
+      }
+      if (rlk && weight > 0) {
+        rlk.rotation.x += Math.max(0, weight) * 0.15;
+      }
+
+      // C. Secondary follow-through on arms
+      const la = this._vrm.getBone('leftUpperArm');
+      const ra = this._vrm.getBone('rightUpperArm');
+      if (la) la.rotation.z += breath * 0.3 + weightFast * 0.2;
+      if (ra) ra.rotation.z -= breath * 0.3 + weightFast * 0.2;
     }
   }
 
