@@ -1,16 +1,20 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { Logger } from '../logger.js';
 
 /**
  * VRMAdapter - model-agnostic wrapper around any VRM model.
- * Detects capabilities and exposes a unified API.
+ * Detects capabilities, supports VRMA playback, and exposes a unified API.
  */
 export class VRMAdapter {
   constructor() {
     this.vrm = null;
     this.scene = null;
+    this.mixer = null;
+    this._clipCache = new Map();
+    this._currentAction = null;
     this.capabilities = {
       humanoid: false,
       expressions: false,
@@ -48,6 +52,9 @@ export class VRMAdapter {
 
               // Face camera
               this.scene.rotation.y = Math.PI;
+
+              // Initialize AnimationMixer for VRMA clips
+              this.mixer = new THREE.AnimationMixer(this.scene);
 
               Logger.info('VRM loaded:', modelPath);
               Logger.info('Capabilities:', JSON.stringify(this.capabilities));
@@ -153,6 +160,103 @@ export class VRMAdapter {
     try {
       this.vrm.lookAt.target = target;
     } catch (e) { /* graceful */ }
+  }
+
+  /**
+   * Loads a .vrma animation file and retargets it to this VRM model.
+   * Results are cached by vrmaPath.
+   */
+  async loadVRMA(vrmaPath) {
+    if (!this.loaded || !this.vrm) return null;
+    if (this._clipCache.has(vrmaPath)) {
+      return this._clipCache.get(vrmaPath);
+    }
+
+    return new Promise((resolve) => {
+      try {
+        const loader = new GLTFLoader();
+        loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+
+        loader.load(
+          vrmaPath,
+          (gltf) => {
+            try {
+              const vrmAnimation = gltf.userData.vrmAnimation;
+              if (!vrmAnimation) {
+                Logger.warn('[VRMA] No vrmAnimation found in:', vrmaPath);
+                resolve(null);
+                return;
+              }
+
+              const clip = createVRMAnimationClip(vrmAnimation, this.vrm);
+              this._clipCache.set(vrmaPath, clip);
+              resolve(clip);
+            } catch (err) {
+              Logger.warn('[VRMA] Clip retarget error for', vrmaPath, err);
+              resolve(null);
+            }
+          },
+          undefined,
+          (err) => {
+            Logger.warn('[VRMA] Failed to load:', vrmaPath, err);
+            resolve(null);
+          }
+        );
+      } catch (e) {
+        Logger.warn('[VRMA] Loader setup error:', e);
+        resolve(null);
+      }
+    });
+  }
+
+  /**
+   * Plays an AnimationClip on the VRM model via AnimationMixer with crossfading.
+   */
+  playVRMA(clip, loop = true, blendDuration = 0.4) {
+    if (!this.mixer || !clip) return null;
+
+    try {
+      const prevAction = this._currentAction;
+      const nextAction = this.mixer.clipAction(clip);
+
+      nextAction.reset();
+      nextAction.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+      nextAction.clampWhenFinished = !loop;
+
+      if (prevAction && prevAction !== nextAction) {
+        prevAction.fadeOut(blendDuration);
+      }
+
+      nextAction.fadeIn(blendDuration).play();
+      this._currentAction = nextAction;
+      return nextAction;
+    } catch (e) {
+      Logger.warn('[VRMA] Playback error:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Stops active VRMA action with smooth crossfade to rest.
+   */
+  stopVRMA(blendDuration = 0.4) {
+    if (this._currentAction) {
+      this._currentAction.fadeOut(blendDuration);
+      this._currentAction = null;
+    }
+  }
+
+  /**
+   * Updates AnimationMixer for active VRMA animation tracks.
+   */
+  updateMixer(delta) {
+    if (this.mixer) {
+      try {
+        this.mixer.update(delta);
+      } catch (e) {
+        Logger.warn('[VRMA] Mixer update error:', e);
+      }
+    }
   }
 
   update(delta) {
