@@ -3,7 +3,7 @@
  *
  * Implements Section 47 & 48 of the Master Specification:
  * - Single authoritative source of truth for position, velocity, facing, posture, and support.
- * - Prevents dual coordinate systems or competing state owners.
+ * - Always inside screen by default with safe ground padding.
  */
 export class CharacterWorldState {
   constructor(worldModel) {
@@ -14,18 +14,18 @@ export class CharacterWorldState {
 
     // Authoritative desktop coordinates (pixels)
     this.desktopX = this._world.homeDesktopX;
-    this.desktopY = this._world.screenH;
+    this.desktopY = this._world.screenH - (this._world.groundPaddingPx || 35);
 
     // Authoritative world coordinates (meters)
     this.worldX = this._world.desktopXToWorld(this.desktopX);
-    this.worldY = this._world.groundY;
+    this.worldY = this._world.groundY + (this._world.groundPaddingWorldY || 0);
     this.worldZ = 0;
 
-    // Kinematics & orientation
+    // Kinematics & orientation (always facing straight forward towards viewer)
     this.velocityX = 0;
     this.velocityY = 0;
     this.facingRight = true;
-    this.facingAngle = Math.PI; // Face viewer by default
+    this.facingAngle = Math.PI; // Face viewer directly
 
     // Support surface & contact
     this.supportSurface = this._world.groundSurface;
@@ -33,14 +33,14 @@ export class CharacterWorldState {
 
     // Active Action Lifecycle
     this.activeIntent = null;
-    this.actionPhase = 'IDLE'; // IDLE, START, ACTIVE, RECOVERY
+    this.actionPhase = 'IDLE';
     this.isTransitioning = false;
   }
 
   /**
    * Sets authoritative horizontal position, clamped to safe boundaries for current posture.
    */
-  setPosition(desktopX, desktopY = this._world.screenH) {
+  setPosition(desktopX, desktopY = (this._world.screenH - (this._world.groundPaddingPx || 35))) {
     this.desktopX = this._world.clampSafeX(desktopX, this.posture);
     this.desktopY = desktopY;
     this.worldX = this._world.desktopXToWorld(this.desktopX);

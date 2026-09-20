@@ -6,9 +6,10 @@ import { getAnimationMetadata } from './AnimationCatalog.js';
  * AnimationController — Layered humanoid animation blender & controller.
  *
  * Implements Sections 13, 14, 15, 45, 46 of the Master Specification:
+ * - Upright straight standing posture facing user
  * - Layer 0: Base Posture / Locomotion (walk, sit, idle)
  * - Layer 1: Upper Body Gesture (wave, think, stretch, pet)
- * - Layer 2: Procedural Micro-Motion (breathing, weight-shift, subtle head sway)
+ * - Layer 2: Procedural Micro-Motion (thoracic breathing, zero tilt sway)
  * - Smooth crossfade blending between poses
  * - Automatic anatomical joint limit clamping via PhysicalValidator
  */
@@ -23,7 +24,7 @@ export class AnimationController {
     // Crossfading state
     this._blendDuration = 0.4;
     this._blendTimer = 0.4;
-    this._blendWeight = 1.0; // 0.0 (prev) -> 1.0 (current)
+    this._blendWeight = 1.0;
   }
 
   play(name, customBlendDuration = null) {
@@ -63,7 +64,7 @@ export class AnimationController {
       // 1. LAYER 0 & 1: Evaluate Active Animation
       this._evaluateAnimation(this._currentAnim, delta);
 
-      // 2. LAYER 2: Procedural Micro-Motion (Breathing & Weight Shift)
+      // 2. LAYER 2: Procedural Micro-Motion (Pure Thoracic Breathing)
       this._applyMicroMotion(delta);
 
       // 3. PHYSICAL VALIDATOR: Clamp all joints to anatomical limits
@@ -150,65 +151,70 @@ export class AnimationController {
     }
   }
 
-  // === LAYER 2: PROCEDURAL MICRO-MOTION ===
+  // === LAYER 2: PROCEDURAL MICRO-MOTION (STANDING STRAIGHT) ===
   _applyMicroMotion(delta) {
-    const isLocomoting = this._currentAnim === 'walk' || this._currentAnim === 'run';
-    const isSitting = this._currentAnim === 'sit' || this._currentAnim === 'read';
-
-    // 1. Natural thoracic breathing (gentle continuous expansion)
-    const breathCycle = Math.sin(this._time * 1.6);
+    // Pure gentle thoracic breathing expansion on X axis only (no sideways sway)
+    const breathCycle = Math.sin(this._time * 1.5);
     const chest = this._vrm.getBone('chest') || this._vrm.getBone('spine');
     if (chest) {
-      chest.rotation.x += breathCycle * 0.012;
-    }
-
-    // 2. Subtle weight-shift sway when standing still
-    if (!isLocomoting && !isSitting) {
-      const sway = Math.sin(this._time * 0.7);
-      const hips = this._vrm.getBone('hips');
-      if (hips) {
-        hips.rotation.z += sway * 0.018;
-        hips.rotation.y += sway * 0.012;
-      }
+      chest.rotation.x += breathCycle * 0.008;
     }
   }
 
-  // === ANIMATIONS ===
-
+  // === STANDING STRAIGHT IDLE POSE ===
   _animIdle(delta) {
     const breath = Math.sin(this._time * 1.5);
-    const sway = Math.sin(this._time * 0.7);
 
+    // Upright straight spine, zero roll/yaw
     const spine = this._vrm.getBone('spine');
     if (spine) {
-      spine.rotation.x = this._lerp(spine.rotation.x, 0.02 + breath * 0.015, 0.08);
-      spine.rotation.z = this._lerp(spine.rotation.z, -sway * 0.015, 0.08);
+      spine.rotation.x = this._lerp(spine.rotation.x, 0.015 + breath * 0.008, 0.08);
+      spine.rotation.y = this._lerp(spine.rotation.y, 0, 0.1);
+      spine.rotation.z = this._lerp(spine.rotation.z, 0, 0.1);
     }
 
+    // Straight hips, zero roll/yaw
+    const hips = this._vrm.getBone('hips');
+    if (hips) {
+      hips.rotation.x = this._lerp(hips.rotation.x, 0, 0.1);
+      hips.rotation.y = this._lerp(hips.rotation.y, 0, 0.1);
+      hips.rotation.z = this._lerp(hips.rotation.z, 0, 0.1);
+    }
+
+    // Straight forward head & neck
     const head = this._vrm.getBone('head');
     if (head) {
-      head.rotation.z = this._lerp(head.rotation.z, Math.sin(this._time * 0.5) * 0.04, 0.08);
-      head.rotation.y = this._lerp(head.rotation.y, Math.sin(this._time * 0.35) * 0.04, 0.08);
+      head.rotation.x = this._lerp(head.rotation.x, 0, 0.1);
+      head.rotation.y = this._lerp(head.rotation.y, 0, 0.1);
+      head.rotation.z = this._lerp(head.rotation.z, 0, 0.1);
     }
 
+    const neck = this._vrm.getBone('neck');
+    if (neck) {
+      neck.rotation.set(0, 0, 0);
+    }
+
+    // Relaxed symmetrical arms hanging straight alongside body
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
     const lla = this._vrm.getBone('leftLowerArm');
     const rla = this._vrm.getBone('rightLowerArm');
+
+    if (la) la.rotation.set(0.08, 0.02, this._lerp(la.rotation.z, 1.28 + breath * 0.01, 0.08));
+    if (ra) ra.rotation.set(0.08, -0.02, this._lerp(ra.rotation.z, -1.28 - breath * 0.01, 0.08));
+    if (lla) lla.rotation.set(0.05, 0, this._lerp(lla.rotation.z, 0.12, 0.08));
+    if (rla) rla.rotation.set(0.05, 0, this._lerp(rla.rotation.z, -0.12, 0.08));
+
+    // Straight legs downwards, feet flat on ground
     const ll = this._vrm.getBone('leftUpperLeg');
     const rl = this._vrm.getBone('rightUpperLeg');
     const llk = this._vrm.getBone('leftLowerLeg');
     const rlk = this._vrm.getBone('rightLowerLeg');
 
-    if (la) la.rotation.set(0.12, 0.05, this._lerp(la.rotation.z, 1.28 + breath * 0.015, 0.08));
-    if (ra) ra.rotation.set(0.12, -0.05, this._lerp(ra.rotation.z, -1.28 - breath * 0.015, 0.08));
-    if (lla) lla.rotation.set(0.10, 0, this._lerp(lla.rotation.z, 0.15, 0.08));
-    if (rla) rla.rotation.set(0.10, 0, this._lerp(rla.rotation.z, -0.15, 0.08));
-
-    if (ll) ll.rotation.x = this._lerp(ll.rotation.x, 0, 0.1);
-    if (rl) rl.rotation.x = this._lerp(rl.rotation.x, 0, 0.1);
-    if (llk) llk.rotation.x = this._lerp(llk.rotation.x, 0, 0.1);
-    if (rlk) rlk.rotation.x = this._lerp(rlk.rotation.x, 0, 0.1);
+    if (ll) ll.rotation.set(0, 0, 0);
+    if (rl) rl.rotation.set(0, 0, 0);
+    if (llk) llk.rotation.set(0.02, 0, 0);
+    if (rlk) rlk.rotation.set(0.02, 0, 0);
   }
 
   _animWalk(delta) {
@@ -238,9 +244,11 @@ export class AnimationController {
     }
 
     const spine = this._vrm.getBone('spine');
-    const hips = this._vrm.getBone('hips');
-    if (spine) spine.rotation.x = Math.abs(Math.sin(this._walkCycle * 2)) * 0.03;
-    if (hips) hips.rotation.z = Math.sin(this._walkCycle) * 0.03;
+    if (spine) {
+      spine.rotation.x = Math.abs(Math.sin(this._walkCycle * 2)) * 0.03;
+      spine.rotation.y = 0;
+      spine.rotation.z = 0;
+    }
   }
 
   _animRun(delta) {
@@ -294,7 +302,7 @@ export class AnimationController {
     if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.3, 0.15);
   }
 
-  // === PREPARE TO SIT (Natural crouching transition) ===
+  // === PREPARE TO SIT ===
   _animSitPrepare(delta) {
     const leftLeg = this._vrm.getBone('leftUpperLeg');
     const rightLeg = this._vrm.getBone('rightUpperLeg');
@@ -364,9 +372,6 @@ export class AnimationController {
       rla.rotation.z = this._lerp(rla.rotation.z, -0.9 + wave * 0.35 * intensity, 0.2);
     }
     if (rh) rh.rotation.z = wave * 0.25 * intensity;
-
-    const head = this._vrm.getBone('head');
-    if (head) head.rotation.z = this._lerp(head.rotation.z, 0.14 * intensity, 0.1);
   }
 
   _animStretch(delta) {
@@ -387,20 +392,16 @@ export class AnimationController {
     if (rla) rla.rotation.z = this._lerp(rla.rotation.z, -0.25, 0.08);
 
     const spine = this._vrm.getBone('spine');
-    const head = this._vrm.getBone('head');
     if (spine) spine.rotation.x = this._lerp(spine.rotation.x, -0.16, 0.06);
-    if (head) head.rotation.x = this._lerp(head.rotation.x, -0.18, 0.06);
   }
 
   _animBounce(delta) {
     const bounce = Math.abs(Math.sin(this._time * 6));
     const hips = this._vrm.getBone('hips');
     const spine = this._vrm.getBone('spine');
-    const head = this._vrm.getBone('head');
 
     if (hips) hips.position.y = bounce * 0.035;
     if (spine) spine.rotation.x = bounce * 0.03;
-    if (head) head.rotation.z = Math.sin(this._time * 3) * 0.08;
 
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
@@ -416,8 +417,7 @@ export class AnimationController {
   _animPhone(delta) {
     const head = this._vrm.getBone('head');
     if (head) {
-      head.rotation.x = this._lerp(head.rotation.x, 0.32, 0.08);
-      head.rotation.z = this._lerp(head.rotation.z, 0.08, 0.08);
+      head.rotation.x = this._lerp(head.rotation.x, 0.25, 0.08);
     }
     const ra = this._vrm.getBone('rightUpperArm');
     const rla = this._vrm.getBone('rightLowerArm');
@@ -443,15 +443,9 @@ export class AnimationController {
   _animMusic(delta) {
     const beat = Math.sin(this._time * 4.0);
     const head = this._vrm.getBone('head');
-    const spine = this._vrm.getBone('spine');
-    const hips = this._vrm.getBone('hips');
-
     if (head) {
-      head.rotation.x = 0.05 + Math.abs(beat) * 0.08;
-      head.rotation.z = beat * 0.08;
+      head.rotation.x = 0.05 + Math.abs(beat) * 0.06;
     }
-    if (hips) hips.rotation.z = beat * 0.05;
-    if (spine) spine.rotation.z = -beat * 0.03;
 
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
@@ -467,8 +461,7 @@ export class AnimationController {
   _animThink(delta) {
     const head = this._vrm.getBone('head');
     if (head) {
-      head.rotation.z = this._lerp(head.rotation.z, 0.22, 0.08);
-      head.rotation.x = this._lerp(head.rotation.x, -0.12, 0.08);
+      head.rotation.x = this._lerp(head.rotation.x, -0.08, 0.08);
     }
     const ra = this._vrm.getBone('rightUpperArm');
     const rla = this._vrm.getBone('rightLowerArm');
@@ -496,8 +489,7 @@ export class AnimationController {
   _animShy(delta) {
     const head = this._vrm.getBone('head');
     if (head) {
-      head.rotation.z = this._lerp(head.rotation.z, -0.15, 0.08);
-      head.rotation.x = this._lerp(head.rotation.x, 0.18, 0.08);
+      head.rotation.x = this._lerp(head.rotation.x, 0.15, 0.08);
     }
     const la = this._vrm.getBone('leftUpperArm');
     const ra = this._vrm.getBone('rightUpperArm');
@@ -520,15 +512,12 @@ export class AnimationController {
       rla.rotation.y = this._lerp(rla.rotation.y, -0.6, 0.08);
       rla.rotation.z = this._lerp(rla.rotation.z, -0.3, 0.08);
     }
-    const hips = this._vrm.getBone('hips');
-    if (hips) hips.rotation.z = Math.sin(this._time * 1.5) * 0.02;
   }
 
   _animYawn(delta) {
     const head = this._vrm.getBone('head');
     if (head) {
-      head.rotation.x = this._lerp(head.rotation.x, -0.20, 0.06);
-      head.rotation.z = this._lerp(head.rotation.z, 0.10, 0.06);
+      head.rotation.x = this._lerp(head.rotation.x, -0.18, 0.06);
     }
     const ra = this._vrm.getBone('rightUpperArm');
     const rla = this._vrm.getBone('rightLowerArm');
@@ -546,9 +535,6 @@ export class AnimationController {
   }
 
   _animConfused(delta) {
-    const head = this._vrm.getBone('head');
-    if (head) head.rotation.z = this._lerp(head.rotation.z, -0.25, 0.08);
-
     const ra = this._vrm.getBone('rightUpperArm');
     const la = this._vrm.getBone('leftUpperArm');
     if (ra) ra.rotation.z = this._lerp(ra.rotation.z, -1.15, 0.08);
@@ -593,13 +579,7 @@ export class AnimationController {
   }
 
   _animPet(delta) {
-    const head = this._vrm.getBone('head');
     const spine = this._vrm.getBone('spine');
-
-    if (head) {
-      head.rotation.z = this._lerp(head.rotation.z, 0.18, 0.1);
-      head.rotation.x = this._lerp(head.rotation.x, -0.08, 0.1);
-    }
     if (spine) spine.rotation.x = Math.sin(this._time * 1.0) * 0.02;
 
     const la = this._vrm.getBone('leftUpperArm');

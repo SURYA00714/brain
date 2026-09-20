@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
  * MovementController — Authoritative position & human-like grounded locomotion.
  *
  * Implements Sections 28, 29, 30, 46, 47 of the Master Specification:
- * - Turn-before-and-during movement (zero moonwalking)
+ * - Always facing straight forward (Math.PI) toward the user
  * - Safe boundary containment via WorldModel dynamic posture envelope
  * - Smooth acceleration, deceleration braking, and clean zero-jitter stopping
  * - Synchronizes with single authoritative CharacterWorldState
@@ -29,9 +29,9 @@ export class MovementController {
     this._velocityY = 0;
     this._isAirborne = false;
 
-    // Orientation (facing angle)
+    // Always facing straight forward towards the user (Math.PI in Three.js VRM rig)
     this._facingRight = true;
-    this._currentFacingAngle = Math.PI; // Face viewer/camera initially
+    this._currentFacingAngle = Math.PI;
     this._isTurning = false;
   }
 
@@ -76,7 +76,7 @@ export class MovementController {
 
     this._targetX = safeTarget;
     this._facingRight = dx > 0;
-    this._isTurning = true;
+    this._isTurning = false;
   }
 
   /**
@@ -107,23 +107,16 @@ export class MovementController {
       const distance = Math.abs(dx);
       const direction = Math.sign(dx);
 
-      // Facing orientation: turn before full speed walk (no moonwalking)
       this._facingRight = direction > 0;
-      const desiredAngle = this._facingRight ? Math.PI + 0.35 : Math.PI - 0.35;
-      const angleDiff = Math.abs(desiredAngle - this._currentFacingAngle);
 
       // Settle if arrived
       if (distance <= (CONFIG.character.arrivalDistance || 15)) {
         this._worldState.setPosition(this._targetX);
         this._targetX = null;
         this._currentVelocityX = 0;
-        this._isTurning = false;
       } else {
-        // Turning first: if facing angle is still far off, accelerate more gently
-        const turnReadiness = angleDiff > 0.4 ? 0.3 : 1.0;
-
         // Deceleration curve when approaching target
-        let maxSpeed = (CONFIG.character.movementSpeed || 140) * turnReadiness;
+        let maxSpeed = (CONFIG.character.movementSpeed || 140);
         if (distance < this._decelDistance) {
           maxSpeed = Math.max(40, maxSpeed * (distance / this._decelDistance));
         }
@@ -170,11 +163,9 @@ export class MovementController {
       }
     }
 
-    // 3. FACING ANGLE INTERPOLATION
-    const targetAngle = this._facingRight ? Math.PI + 0.35 : Math.PI - 0.35;
-    this._currentFacingAngle += (targetAngle - this._currentFacingAngle) * (CONFIG.character.turnLerp || 0.15);
-
-    this._worldState.setFacing(this._facingRight, this._currentFacingAngle);
+    // 3. ALWAYS FACING STRAIGHT FORWARD (Math.PI)
+    this._currentFacingAngle = Math.PI;
+    this._worldState.setFacing(this._facingRight, Math.PI);
     this._worldState.velocityX = this._currentVelocityX;
 
     // Apply to Three.js VRM scene
@@ -189,7 +180,8 @@ export class MovementController {
     try {
       const worldY = this._worldState.worldY + this._jumpOffsetY;
       this._vrm.scene.position.set(this._worldState.worldX, worldY, 0);
-      this._vrm.scene.rotation.y = this._currentFacingAngle;
+      // Strictly facing straight forward toward user
+      this._vrm.scene.rotation.y = Math.PI;
     } catch (e) {}
   }
 }

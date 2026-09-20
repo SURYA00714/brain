@@ -6,7 +6,7 @@ import { CONFIG } from '../config.js';
  * Implements Section 1, 2, 3, 4 of the Master Specification:
  * - Dynamic posture-aware 3D bounding envelope (standing, walking, sitting, sleeping)
  * - Conservative screen safety margins (SAFE_MARGIN_X, SAFE_MARGIN_Y)
- * - Ground floor (groundY = 0)
+ * - Ground floor (groundY = 0) with safe bottom padding
  * - Single deterministic conversion between desktop pixels and Three.js world units
  * - Strict full-body containment so no limb, gesture, or head ever visually leaves the screen
  */
@@ -16,8 +16,11 @@ export class WorldModel {
     this.screenH = typeof window !== 'undefined' ? window.innerHeight : 768;
 
     // Minimum boundary margin from physical display edges (pixels)
-    this.SAFE_MARGIN_X = 60;
-    this.SAFE_MARGIN_Y = 40;
+    this.SAFE_MARGIN_X = 80;
+    this.SAFE_MARGIN_Y = 50;
+
+    // Ground vertical padding in pixels (keeps feet/shoes cleanly above bottom display edge/taskbar)
+    this.groundPaddingPx = 35;
 
     // Posture-specific 3D bounding envelopes (meters / world units)
     this.ENVELOPES = Object.freeze({
@@ -53,7 +56,7 @@ export class WorldModel {
 
   _computeWorldMetrics() {
     const fov = (CONFIG?.camera?.fov || 30) * Math.PI / 360;
-    const camZ = CONFIG?.camera?.z || 3.2;
+    const camZ = CONFIG?.camera?.z || 5.0;
 
     this.visibleH = 2 * Math.tan(fov) * camZ;
     this.visibleW = this.visibleH * (this.screenW / this.screenH);
@@ -61,6 +64,10 @@ export class WorldModel {
 
     this.pxToWorldX = this.visibleW / this.screenW;
     this.pxToWorldY = this.visibleH / this.screenH;
+  }
+
+  get groundPaddingWorldY() {
+    return this.groundPaddingPx * this.pxToWorldY;
   }
 
   /**
@@ -133,9 +140,9 @@ export class WorldModel {
     return safeX && safeY;
   }
 
-  /** Safe home desktop X position */
+  /** Safe home desktop X position (always comfortably inside right area) */
   get homeDesktopX() {
-    const ratio = CONFIG?.character?.homePositionRatio || 0.82;
+    const ratio = CONFIG?.character?.homePositionRatio || 0.80;
     return this.clampSafeX(this.screenW * ratio, 'STANDING');
   }
 }
