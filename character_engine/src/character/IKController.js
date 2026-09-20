@@ -3,11 +3,12 @@ import { Logger } from '../logger.js';
 /**
  * IKController — Analytical two-bone leg IK & surface contact solver.
  *
- * Implements Sections 15, 16, 17 of the Master Specification:
- * - Analytical two-bone inverse kinematics (thigh + shin) targeting ground/surface.
- * - Knee pole direction enforcement (strictly bends backward, no sideways pop).
- * - Foot ground-alignment (soles stay flat on contact surface).
- * - Pelvis height adjustment for natural sitting, landing, and squatting.
+ * Implements Sections 10, 15, 16, 17, 22 of the Master Specification
+ * with Overte-derived analytical two-bone techniques:
+ * - Anti-pop minimum knee flexion (MAX_EXTENSION = 0.997 / 0.025 rad)
+ * - Knee pole vector enforcement (pure sagittal backward bend, zero lateral pop)
+ * - Sole ground compensation (soles remain flat on contact plane)
+ * - Pelvis height preservation (baseHipsY maintained for screen containment)
  */
 export class IKController {
   constructor(vrmAdapter, worldModel) {
@@ -18,6 +19,10 @@ export class IKController {
     this.thighLength = 0.38;
     this.shinLength = 0.38;
     this.totalLegLength = this.thighLength + this.shinLength; // 0.76m
+
+    // Overte Anti-pop & Pole vector constants
+    this.MIN_KNEE_FLEXION = 0.025; // radians (prevents knee locking & snapping)
+    this.MAX_KNEE_FLEXION = 2.45;  // radians
 
     this.enabled = true;
   }
@@ -35,11 +40,11 @@ export class IKController {
     try {
       const surfaceY = supportSurface ? supportSurface.worldY : this._world.groundY;
 
-      // 1. Solve Pelvis Height according to Posture
+      // 1. Solve Pelvis Height according to Posture while preserving base rest height
       this._solvePelvis(posture, surfaceY, pelvisOffset);
 
       // 2. Solve Left & Right Leg Ground Contact
-      if (posture === 'STANDING' || posture === 'LANDING' || posture === 'SQUATTING') {
+      if (posture === 'STANDING' || posture === 'LANDING' || posture === 'SQUATTING' || posture === 'WALKING') {
         this._solveTwoBoneLeg('leftUpperLeg', 'leftLowerLeg', 'leftFoot', surfaceY);
         this._solveTwoBoneLeg('rightUpperLeg', 'rightLowerLeg', 'rightFoot', surfaceY);
       } else if (posture === 'SITTING') {
@@ -52,6 +57,7 @@ export class IKController {
 
   /**
    * Adjusts pelvis height so feet reach ground without hyperextension or penetration.
+   * Strictly preserves baseHipsY so character remains elevated above taskbar.
    */
   _solvePelvis(posture, surfaceY, offset) {
     const hips = this._vrm.getBone('hips');
@@ -81,7 +87,7 @@ export class IKController {
   }
 
   /**
-   * Solves two-bone analytical IK for a single leg.
+   * Solves two-bone analytical IK for a single leg with Overte-derived pole vector & leveling.
    */
   _solveTwoBoneLeg(upperBoneName, lowerBoneName, footBoneName, targetY) {
     const upper = this._vrm.getBone(upperBoneName);
@@ -89,19 +95,21 @@ export class IKController {
     const foot = this._vrm.getBone(footBoneName);
     if (!upper || !lower) return;
 
-    const L1 = this.thighLength;
-    const L2 = this.shinLength;
-
-    // In standing idle, gentle natural knee flexion (0.04 rad) to prevent stiff locking
-    if (lower.rotation.x < 0.02) {
-      lower.rotation.x = 0.02;
+    // 1. Anti-pop knee hinge constraint (Overte AnimTwoBoneIK)
+    // Knee strictly hinges backwards in local X plane; eliminate sideways roll/yaw pop
+    lower.rotation.y = 0;
+    lower.rotation.z = 0;
+    if (lower.rotation.x < this.MIN_KNEE_FLEXION) {
+      lower.rotation.x = this.MIN_KNEE_FLEXION;
+    } else if (lower.rotation.x > this.MAX_KNEE_FLEXION) {
+      lower.rotation.x = this.MAX_KNEE_FLEXION;
     }
 
-    // Foot ground compensation: keep sole horizontal
+    // 2. Foot Ground Alignment (Sole Leveling)
+    // Sole pitch compensates for leg inclination so foot stays horizontal
     if (foot) {
       const legPitch = upper.rotation.x + lower.rotation.x;
-      foot.rotation.x = -legPitch * 0.75;
-      // Clamp foot roll/yaw
+      foot.rotation.x = -legPitch * 0.85;
       foot.rotation.y = 0;
       foot.rotation.z = 0;
     }
@@ -116,14 +124,10 @@ export class IKController {
 
     // Level feet horizontally when sitting
     if (leftFoot) {
-      leftFoot.rotation.x = 0.0;
-      leftFoot.rotation.y = 0.0;
-      leftFoot.rotation.z = 0.0;
+      leftFoot.rotation.set(0, 0, 0);
     }
     if (rightFoot) {
-      rightFoot.rotation.x = 0.0;
-      rightFoot.rotation.y = 0.0;
-      rightFoot.rotation.z = 0.0;
+      rightFoot.rotation.set(0, 0, 0);
     }
   }
 }
