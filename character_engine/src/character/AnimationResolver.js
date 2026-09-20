@@ -224,6 +224,10 @@ export class AnimationResolver {
     }
   }
 
+  get recentHistory() {
+    return [...this._recentHistory];
+  }
+
   clearHistory() {
     this._recentHistory = [];
     this._cooldowns.clear();
