@@ -225,7 +225,9 @@ export class PhysicalValidator {
       const rlk = vrmAdapter.getBone('rightLowerLeg');
       const spine = vrmAdapter.getBone('spine');
       const head = vrmAdapter.getBone('head');
+      const hips = vrmAdapter.getBone('hips');
 
+      if (hips) hips.position.y = vrmAdapter.initialHipsY || 0.8801;
       if (la) la.rotation.set(0.12, 0.05, 1.28);
       if (ra) ra.rotation.set(0.12, -0.05, -1.28);
       if (lla) lla.rotation.set(0.10, 0, 0.15);

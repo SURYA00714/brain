@@ -57,22 +57,23 @@ export class IKController {
     const hips = this._vrm.getBone('hips');
     if (!hips) return;
 
-    let targetPelvisY = 0; // Relative to VRM origin
+    const baseHipsY = this._vrm.initialHipsY || ((hips.position && hips.position.y > 0.3) ? hips.position.y : 0.8801);
+    let targetPelvisY = baseHipsY;
 
     switch (posture) {
       case 'SITTING':
         // Pelvis lowers so buttocks rest on the surface
-        targetPelvisY = -0.42 + offset;
+        targetPelvisY = baseHipsY - 0.38 + offset;
         break;
       case 'SQUATTING':
-        targetPelvisY = -0.35 + offset;
+        targetPelvisY = baseHipsY - 0.32 + offset;
         break;
       case 'LANDING':
-        targetPelvisY = -0.12 + offset;
+        targetPelvisY = baseHipsY - 0.10 + offset;
         break;
       case 'STANDING':
       default:
-        targetPelvisY = 0 + offset;
+        targetPelvisY = baseHipsY + offset;
         break;
     }
 

@@ -39,6 +39,10 @@ export class VRMAdapter {
               // Detect capabilities
               this._detectCapabilities();
 
+              // Cache initial hips Y rest height to prevent pelvis sinking
+              const hips = this.getBone('hips');
+              this.initialHipsY = (hips && hips.position && hips.position.y > 0.3) ? hips.position.y : 0.8801;
+
               // Default pose: lower arms from T-pose
               this._setDefaultPose();
 

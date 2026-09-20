@@ -400,7 +400,8 @@ export class AnimationController {
     const hips = this._vrm.getBone('hips');
     const spine = this._vrm.getBone('spine');
 
-    if (hips) hips.position.y = bounce * 0.035;
+    const baseHipsY = this._vrm.initialHipsY || 0.8801;
+    if (hips) hips.position.y = baseHipsY + bounce * 0.035;
     if (spine) spine.rotation.x = bounce * 0.03;
 
     const la = this._vrm.getBone('leftUpperArm');
