@@ -4,27 +4,31 @@ import { CONFIG } from '../config.js';
  * WorldModel — Desktop environment model & spatial ground truth.
  *
  * Implements Section 1, 2, 3, 4 of the Master Specification:
- * - Screen dimensions & safe margins (SAFE_MARGIN_X, SAFE_MARGIN_Y)
- * - Ground truth floor (groundY = 0)
- * - Character 3D bounding box (width, height, depth)
- * - Support surfaces (Ground + Windows)
- * - Strict safe-area clamping so AO's entire body remains inside the screen.
+ * - Dynamic posture-aware 3D bounding envelope (standing, walking, sitting, sleeping)
+ * - Conservative screen safety margins (SAFE_MARGIN_X, SAFE_MARGIN_Y)
+ * - Ground floor (groundY = 0)
+ * - Single deterministic conversion between desktop pixels and Three.js world units
+ * - Strict full-body containment so no limb, gesture, or head ever visually leaves the screen
  */
 export class WorldModel {
   constructor() {
     this.screenW = typeof window !== 'undefined' ? window.innerWidth : 1366;
     this.screenH = typeof window !== 'undefined' ? window.innerHeight : 768;
 
-    // Screen safety margins (pixels)
+    // Minimum boundary margin from physical display edges (pixels)
     this.SAFE_MARGIN_X = 60;
     this.SAFE_MARGIN_Y = 40;
 
-    // Character approximate physical dimensions (world units)
-    this.charWidth = 0.40;   // approx body span with resting arms
-    this.charHeight = 1.45;  // head to feet height
-    this.charDepth = 0.25;
+    // Posture-specific 3D bounding envelopes (meters / world units)
+    this.ENVELOPES = Object.freeze({
+      STANDING: { width: 0.42, height: 1.45, depth: 0.28 },
+      WALKING: { width: 0.48, height: 1.45, depth: 0.40 },
+      SITTING: { width: 0.42, height: 0.95, depth: 0.50 },
+      SQUATTING: { width: 0.45, height: 0.85, depth: 0.45 },
+      SLEEPING: { width: 0.70, height: 0.45, depth: 0.50 },
+      RESTING: { width: 0.45, height: 1.10, depth: 0.45 }
+    });
 
-    // World visible rect calculations
     this._computeWorldMetrics();
 
     if (typeof window !== 'undefined') {
@@ -35,8 +39,8 @@ export class WorldModel {
       });
     }
 
-    // Default support surface: the desktop ground floor
-    this.groundSurface = {
+    // Default ground support surface
+    this.groundSurface = Object.freeze({
       id: 'desktop_floor',
       type: 'GROUND',
       desktopY: this.screenH,
@@ -44,7 +48,7 @@ export class WorldModel {
       minX: 0,
       maxX: this.screenW,
       isValid: true
-    };
+    });
   }
 
   _computeWorldMetrics() {
@@ -55,17 +59,34 @@ export class WorldModel {
     this.visibleW = this.visibleH * (this.screenW / this.screenH);
     this.camY = this.visibleH / 2;
 
-    // Pixel-to-world conversion factors
     this.pxToWorldX = this.visibleW / this.screenW;
     this.pxToWorldY = this.visibleH / this.screenH;
+  }
 
-    // Character half-width in desktop pixels
-    this.charHalfWidthPx = (this.charWidth / this.pxToWorldX) / 2;
-    this.charHeightPx = this.charHeight / this.pxToWorldY;
+  /**
+   * Retrieves the physical 3D envelope and pixel dimensions for a given posture.
+   */
+  getEnvelope(posture = 'STANDING') {
+    const env = this.ENVELOPES[posture] || this.ENVELOPES.STANDING;
+    const halfWidthPx = (env.width / this.pxToWorldX) / 2;
+    const heightPx = env.height / this.pxToWorldY;
+    const depthPx = env.depth / this.pxToWorldX;
+    return {
+      ...env,
+      halfWidthPx,
+      heightPx,
+      depthPx
+    };
+  }
 
-    // Safe bounds for character origin (center of feet)
-    this.safeMinX = this.SAFE_MARGIN_X + this.charHalfWidthPx;
-    this.safeMaxX = this.screenW - this.SAFE_MARGIN_X - this.charHalfWidthPx;
+  /**
+   * Gets the safe desktop X boundary range for a specific posture.
+   */
+  getSafeXBounds(posture = 'STANDING') {
+    const { halfWidthPx } = this.getEnvelope(posture);
+    const minX = this.SAFE_MARGIN_X + halfWidthPx;
+    const maxX = this.screenW - this.SAFE_MARGIN_X - halfWidthPx;
+    return { minX, maxX };
   }
 
   /** Desktop pixel X → Three.js World X */
@@ -94,24 +115,27 @@ export class WorldModel {
   }
 
   /**
-   * Clamps a desktop X position so AO's entire body remains inside the safe screen margin.
+   * Clamps a desktop X position so the full body envelope remains strictly inside safe margins.
    */
-  clampSafeX(px) {
-    return Math.max(this.safeMinX, Math.min(this.safeMaxX, px));
+  clampSafeX(px, posture = 'STANDING') {
+    const { minX, maxX } = this.getSafeXBounds(posture);
+    return Math.max(minX, Math.min(maxX, px));
   }
 
   /**
-   * Validates whether a given desktop coordinate is within the safe area.
+   * Validates whether an entire character envelope fits within the screen's safe boundaries.
    */
-  isInsideSafeBounds(px, py = this.screenH) {
-    const safeX = px >= this.safeMinX && px <= this.safeMaxX;
-    const safeY = py >= this.SAFE_MARGIN_Y && py <= this.screenH;
+  isInsideSafeBounds(px, py = this.screenH, posture = 'STANDING') {
+    const { minX, maxX } = this.getSafeXBounds(posture);
+    const { heightPx } = this.getEnvelope(posture);
+    const safeX = px >= minX && px <= maxX;
+    const safeY = (py - heightPx) >= this.SAFE_MARGIN_Y && py <= (this.screenH + 5);
     return safeX && safeY;
   }
 
-  /** Home position (bottom-right desktop area with safe padding) */
+  /** Safe home desktop X position */
   get homeDesktopX() {
     const ratio = CONFIG?.character?.homePositionRatio || 0.82;
-    return this.clampSafeX(this.screenW * ratio);
+    return this.clampSafeX(this.screenW * ratio, 'STANDING');
   }
 }

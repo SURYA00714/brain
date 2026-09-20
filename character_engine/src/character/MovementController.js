@@ -5,7 +5,7 @@ import { CONFIG } from '../config.js';
  *
  * Implements Sections 28, 29, 30, 46, 47 of the Master Specification:
  * - Turn-before-and-during movement (zero moonwalking)
- * - Safe boundary containment via WorldModel (entire body inside safe area)
+ * - Safe boundary containment via WorldModel dynamic posture envelope
  * - Smooth acceleration, deceleration braking, and clean zero-jitter stopping
  * - Synchronizes with single authoritative CharacterWorldState
  */
@@ -52,10 +52,10 @@ export class MovementController {
   }
 
   /**
-   * Immediately set desktop position (clamped to safe margins).
+   * Immediately set desktop position (clamped to safe margins for current posture).
    */
   setDesktopX(x) {
-    const clamped = this._world.clampSafeX(x);
+    const clamped = this._world.clampSafeX(x, this._worldState.posture);
     this._currentVelocityX = 0;
     this._targetX = null;
     this._worldState.setPosition(clamped);
@@ -66,7 +66,7 @@ export class MovementController {
    * Request walking to target desktop X.
    */
   walkTo(targetX) {
-    const safeTarget = this._world.clampSafeX(targetX);
+    const safeTarget = this._world.clampSafeX(targetX, 'WALKING');
     const dx = safeTarget - this.desktopX;
 
     if (Math.abs(dx) <= (CONFIG.character.arrivalDistance || 15)) {

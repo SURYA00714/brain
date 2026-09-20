@@ -21,6 +21,9 @@ import { CharacterWorldState } from './CharacterWorldState.js';
 import { PhysicalValidator } from './PhysicalValidator.js';
 import { PostureGraph, POSTURE } from './PostureGraph.js';
 import { AnimationResolver } from './AnimationResolver.js';
+import { ActionIntent, ACTION_PRIORITY, ACTION_PHASE } from './ActionIntent.js';
+import { IKController } from './IKController.js';
+import { EventDispatcher } from './EventDispatcher.js';
 import { Logger } from '../logger.js';
 
 /**
@@ -29,7 +32,7 @@ import { Logger } from '../logger.js';
  * Implements the Core Master Architecture:
  * PERCEPTION → WORLD MODEL → INTERNAL STATE → BEHAVIOR DECISION →
  * ACTION INTENT → PHYSICAL VALIDATOR → POSTURE GRAPH →
- * ANIMATION RESOLVER → LAYERED BLENDER → VRM
+ * ANIMATION RESOLVER → LAYERED BLENDER → IK SOLVER → VRM
  */
 export class CharacterController {
   constructor(scene) {
@@ -52,7 +55,10 @@ export class CharacterController {
     this.lookAt = new LookAtController(this.vrm);
     this.movement = new MovementController(this.vrm, this.worldModel, this.worldState);
 
-    // 3. Perception & Mind
+    // 3. IK & Contact Solver
+    this.ik = new IKController(this.vrm, this.worldModel);
+
+    // 4. Perception & Mind
     this.mouse = new MouseTracker(this.desktop);
     this.emotion = new EmotionalState();
     this.dayNight = new DayNightCycle();
@@ -62,9 +68,11 @@ export class CharacterController {
     this.idleBehavior = new IdleBehaviorEngine(this);
     this.behavior = this.idleBehavior;
     this.bridge = new BrainBridge(this);
+    this.events = new EventDispatcher(this);
 
     this._mouseMode = 'LOOK_ONLY';
     this._loaded = false;
+    this._activeIntent = null;
 
     // Synchronize PostureGraph with legacy StateMachine for bridge compatibility
     this.postureGraph.onTransition((prev, next) => this._onPostureChanged(prev, next));
@@ -91,18 +99,38 @@ export class CharacterController {
     }
   }
 
-  // === PIPELINE: ACTION INTENT EXECUTION ===
+  // === PIPELINE: ACTION INTENT EXECUTION & PREEMPTION ===
 
   /**
-   * Executes a semantic ActionIntent through the full physical & posture pipeline.
+   * Executes a semantic ActionIntent through the physical, posture, and IK pipeline.
    */
-  async executeActionIntent(intent, durationRange = [2500, 3500]) {
+  async executeActionIntent(rawIntent, durationRange = [2500, 3500]) {
     if (!this._loaded) return false;
+
+    const intent = (rawIntent instanceof ActionIntent)
+      ? rawIntent
+      : new ActionIntent(rawIntent);
+
+    // Check preemption against active intent
+    if (this._activeIntent && this._activeIntent.phase === ACTION_PHASE.ACTIVE) {
+      if (!this._activeIntent.canBeInterruptedBy(intent.priority)) {
+        Logger.warn(`[INTENT] Action ${intent.type} rejected: active ${this._activeIntent.type} has higher priority`);
+        return false;
+      }
+      // Cancel currently running action
+      this._activeIntent.cancel(`Interrupted by ${intent.type}`);
+      this.movement.stop();
+    }
+
+    this._activeIntent = intent;
+    intent.start();
 
     // 1. PHYSICAL & SPATIAL VALIDATION
     const valResult = PhysicalValidator.validateIntent(intent, this.worldState, this.worldModel);
     if (!valResult.valid) {
       Logger.warn(`[INTENT] Action rejected by PhysicalValidator: ${valResult.reason}`);
+      intent.fail(valResult.reason);
+      this._activeIntent = null;
       return false;
     }
     const safeIntent = valResult.sanitizedIntent || intent;
@@ -110,16 +138,22 @@ export class CharacterController {
     // 2. POSTURE TRANSITION (if required)
     if (safeIntent.type === 'WALK') {
       if (!this.postureGraph.transition(POSTURE.WALK_START)) {
+        intent.fail('Illegal posture transition to WALK_START');
+        this._activeIntent = null;
         return false;
       }
     } else if (safeIntent.type === 'SIT') {
       if (!this.postureGraph.transition(POSTURE.SIT_PREPARE, { hasSurface: !!safeIntent.surface })) {
+        intent.fail('Illegal posture transition to SIT_PREPARE');
+        this._activeIntent = null;
         return false;
       }
       this.animation.play('sit_prepare');
       await this.wait(1000);
       this.postureGraph.transition(POSTURE.SITTING, { hasSurface: true });
     }
+
+    intent.setActive();
 
     // 3. ANIMATION RESOLUTION
     const { animId } = this.animationResolver.resolve(
@@ -151,16 +185,20 @@ export class CharacterController {
       this.postureGraph.transition(POSTURE.WALK_STOP);
       this.postureGraph.transition(POSTURE.STANDING);
     } else {
-      // Gesture / resting duration
+      // Duration
       const duration = Array.isArray(durationRange)
         ? durationRange[0] + Math.random() * (durationRange[1] - durationRange[0])
-        : (durationRange || 3000);
+        : (durationRange || intent.duration || 3000);
       await this.wait(duration);
     }
 
-    // 6. RETURN TO SAFE POSTURE
-    if (this.postureGraph.current === POSTURE.STANDING) {
-      this.idle();
+    // 6. FINALIZE & SETTLE
+    if (this._activeIntent === intent) {
+      intent.complete();
+      this._activeIntent = null;
+      if (this.postureGraph.current === POSTURE.STANDING) {
+        this.idle();
+      }
     }
     return true;
   }
@@ -173,14 +211,20 @@ export class CharacterController {
     this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
     this.animation.play('idle');
     this.expression.setEmotion('neutral');
+    if (this._activeIntent) {
+      this._activeIntent.complete();
+      this._activeIntent = null;
+    }
   }
 
   walkTo(desktopX) {
-    this.executeActionIntent({
+    this.executeActionIntent(new ActionIntent({
       type: 'WALK',
       targetX: desktopX,
+      priority: ACTION_PRIORITY.USER_COMMAND,
+      source: 'USER',
       emotion: 'neutral'
-    });
+    }));
   }
 
   walkToDesktop(x) {
@@ -188,11 +232,13 @@ export class CharacterController {
   }
 
   goHome() {
-    this.executeActionIntent({
+    this.executeActionIntent(new ActionIntent({
       type: 'WALK',
       targetX: this.worldModel.homeDesktopX,
+      priority: ACTION_PRIORITY.USER_COMMAND,
+      source: 'USER',
       emotion: 'neutral'
-    });
+    }));
   }
 
   jump() {
@@ -204,18 +250,24 @@ export class CharacterController {
   }
 
   sit() {
-    this.executeActionIntent({
+    this.executeActionIntent(new ActionIntent({
       type: 'SIT',
       surface: this.worldState.supportSurface || this.worldModel.groundSurface,
-      emotion: 'neutral'
-    }, 10000);
+      priority: ACTION_PRIORITY.USER_COMMAND,
+      source: 'USER',
+      emotion: 'neutral',
+      duration: 10000
+    }));
   }
 
   sleep() {
-    this.executeActionIntent({
+    this.executeActionIntent(new ActionIntent({
       type: 'REST',
-      emotion: 'sleepy'
-    }, 12000);
+      priority: ACTION_PRIORITY.USER_COMMAND,
+      source: 'USER',
+      emotion: 'sleepy',
+      duration: 12000
+    }));
   }
 
   wake() {
@@ -230,14 +282,21 @@ export class CharacterController {
 
   pet() {
     this.emotion.onPetting();
-    this.executeActionIntent({
+    this.executeActionIntent(new ActionIntent({
       type: 'PET',
+      priority: ACTION_PRIORITY.USER_COMMAND,
+      source: 'USER',
       emotion: 'happy',
+      duration: 2800,
       attention: { target: ATTENTION_TARGET.USER, duration: 3.0, intensity: 0.9 }
-    }, 2800);
+    }));
   }
 
   stopAction() {
+    if (this._activeIntent) {
+      this._activeIntent.cancel('Manual user stop');
+      this._activeIntent = null;
+    }
     this.movement.stop();
     this.idle();
   }
@@ -307,10 +366,16 @@ export class CharacterController {
       // 5. Autonomous Behavior Engine update
       this.idleBehavior.update(dt);
 
-      // 6. Layered Animation Blender with Anatomical Joint Clamping
+      // 6. Layered Animation Blender
       this.animation.update(dt);
 
-      // 7. VRM Spring bone simulation
+      // 7. IK & Foot/Pelvis Ground Alignment Solver
+      this.ik.solveLegs(this.postureGraph.current, this.worldState.supportSurface);
+
+      // 8. Anatomical Joint Limit Verification
+      PhysicalValidator.clampAllBones(this.vrm);
+
+      // 9. VRM Spring bone simulation
       this.vrm.update(dt);
 
     } catch (e) {

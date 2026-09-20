@@ -95,13 +95,19 @@ export class PhysicalValidator {
   };
 
   /**
-   * Validates and clamps a spatial target inside safe screen margins.
+   * Validates and clamps a spatial target inside safe screen margins for the given posture.
+   * Sanitizes invalid, infinite, or NaN coordinates to safe home position.
    */
-  static validateSpatialTarget(targetX, worldModel) {
-    if (typeof targetX !== 'number' || isNaN(targetX)) {
-      return { valid: false, clampedX: worldModel.homeDesktopX, reason: 'Invalid target coordinate' };
+  static validateSpatialTarget(targetX, worldModel, posture = 'STANDING') {
+    if (typeof targetX !== 'number' || isNaN(targetX) || !isFinite(targetX)) {
+      return {
+        valid: true,
+        clampedX: worldModel.homeDesktopX,
+        wasClamped: true,
+        reason: 'Corrupt target sanitized to safe home position'
+      };
     }
-    const clamped = worldModel.clampSafeX(targetX);
+    const clamped = worldModel.clampSafeX(targetX, posture);
     const wasClamped = Math.abs(clamped - targetX) > 1;
     return {
       valid: true,
@@ -139,7 +145,7 @@ export class PhysicalValidator {
 
     switch (intent.type) {
       case 'WALK': {
-        const check = this.validateSpatialTarget(intent.targetX, worldModel);
+        const check = this.validateSpatialTarget(intent.targetX, worldModel, characterWorldState.posture);
         if (!check.valid) return check;
         return { valid: true, sanitizedIntent: { ...intent, targetX: check.clampedX } };
       }
@@ -171,7 +177,6 @@ export class PhysicalValidator {
 
   /**
    * Applies anatomical joint limit clamping to a bone's Euler rotations.
-   * Modifies bone rotation in-place if limits are exceeded.
    */
   static clampBoneRotation(boneName, rotation) {
     const limits = this.JOINT_LIMITS[boneName];
@@ -200,12 +205,14 @@ export class PhysicalValidator {
    */
   static applySafeIdle(characterWorldState, vrmAdapter, worldModel) {
     Logger.warn('[PHYSICAL] Emergency recovery triggered — resetting to SAFE_IDLE');
-    characterWorldState.setPosition(worldModel.clampSafeX(characterWorldState.desktopX));
-    characterWorldState.setPosture('STANDING');
-    characterWorldState.supportSurface = worldModel.groundSurface;
-    characterWorldState.isGrounded = true;
-    characterWorldState.velocityX = 0;
-    characterWorldState.velocityY = 0;
+    if (characterWorldState && worldModel) {
+      characterWorldState.setPosition(worldModel.clampSafeX(characterWorldState.desktopX, 'STANDING'));
+      characterWorldState.setPosture('STANDING');
+      characterWorldState.supportSurface = worldModel.groundSurface;
+      characterWorldState.isGrounded = true;
+      characterWorldState.velocityX = 0;
+      characterWorldState.velocityY = 0;
+    }
 
     if (vrmAdapter && vrmAdapter.loaded) {
       const la = vrmAdapter.getBone('leftUpperArm');
