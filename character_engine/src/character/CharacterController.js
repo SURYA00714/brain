@@ -3,7 +3,7 @@ import { CharacterStateMachine, STATE, PRIORITY } from './CharacterState.js';
 import { VRMAdapter } from './VRMAdapter.js';
 import { AnimationController } from './AnimationController.js';
 import { ExpressionController } from './ExpressionController.js';
-import { LookAtController } from './LookAtController.js';
+import { LookAtController, ATTENTION_TARGET } from './LookAtController.js';
 import { MovementController } from './MovementController.js';
 import { MouseTracker } from './MouseTracker.js';
 import { DesktopCoordinates } from './DesktopCoordinates.js';
@@ -15,24 +15,44 @@ import { CreatureEngine } from '../world/CreatureEngine.js';
 import { VoiceController } from '../mind/VoiceController.js';
 import { BrainBridge } from '../bridge/BrainBridge.js';
 
+// Rebuild Subsystems (Master Specification)
+import { WorldModel } from '../world/WorldModel.js';
+import { CharacterWorldState } from './CharacterWorldState.js';
+import { PhysicalValidator } from './PhysicalValidator.js';
+import { PostureGraph, POSTURE } from './PostureGraph.js';
+import { AnimationResolver } from './AnimationResolver.js';
+import { Logger } from '../logger.js';
+
 /**
- * CharacterController — Central orchestrator for Ao.
- * Architecture:
- * - Body: VRM, Movement, Animation, Expressions, LookAt, Physics
- * - Mind: EmotionalState, Utility AI decision-making, Voice, DayNightCycle
- * - World: DesktopCoordinates, WindowManager, CreatureEngine, Home
- * - Bridge: BrainBridge loopback API
+ * CharacterController — Central orchestrator for AO.
+ *
+ * Implements the Core Master Architecture:
+ * PERCEPTION → WORLD MODEL → INTERNAL STATE → BEHAVIOR DECISION →
+ * ACTION INTENT → PHYSICAL VALIDATOR → POSTURE GRAPH →
+ * ANIMATION RESOLVER → LAYERED BLENDER → VRM
  */
 export class CharacterController {
   constructor(scene) {
     this._scene = scene;
+
+    // 1. Authoritative World & Physical Foundations
+    this.worldModel = new WorldModel();
+    this.worldState = new CharacterWorldState(this.worldModel);
+    this.postureGraph = new PostureGraph(POSTURE.STANDING);
+    this.animationResolver = new AnimationResolver();
+
+    // Legacy adapter for camera math compatibility
     this.desktop = new DesktopCoordinates();
+
+    // 2. VRM & Animation Body Layer
     this.vrm = new VRMAdapter();
     this.state = new CharacterStateMachine();
     this.animation = new AnimationController(this.vrm);
     this.expression = new ExpressionController(this.vrm);
     this.lookAt = new LookAtController(this.vrm);
-    this.movement = new MovementController(this.vrm, this.desktop);
+    this.movement = new MovementController(this.vrm, this.worldModel, this.worldState);
+
+    // 3. Perception & Mind
     this.mouse = new MouseTracker(this.desktop);
     this.emotion = new EmotionalState();
     this.dayNight = new DayNightCycle();
@@ -44,10 +64,10 @@ export class CharacterController {
     this.bridge = new BrainBridge(this);
 
     this._mouseMode = 'LOOK_ONLY';
-    this._currentWindowAnchor = null;
     this._loaded = false;
 
-    this.state.onTransition((old, next) => this._onStateChange(old, next));
+    // Synchronize PostureGraph with legacy StateMachine for bridge compatibility
+    this.postureGraph.onTransition((prev, next) => this._onPostureChanged(prev, next));
   }
 
   async load(modelPath) {
@@ -55,8 +75,8 @@ export class CharacterController {
       await this.vrm.load(modelPath || CONFIG.character.modelPath);
       this._scene.add(this.vrm.scene);
 
-      // Start at home position
-      this.movement.setDesktopX(this.desktop.homeX);
+      // Start at safe home position
+      this.movement.setDesktopX(this.worldModel.homeDesktopX);
 
       this.expression.start();
       this.mouse.start();
@@ -65,22 +85,186 @@ export class CharacterController {
       this.bridge.start();
 
       this._loaded = true;
-      console.log('[AO] Fully loaded. Home at X=' + Math.round(this.desktop.homeX));
+      Logger.info(`[AO] Ready. Authoritative home at X=${Math.round(this.worldState.desktopX)}`);
     } catch (err) {
-      console.error('[AO] Load failed:', err);
+      Logger.error('[AO] Load failed:', err);
     }
   }
 
-  // === Async Activity Helpers ===
+  // === PIPELINE: ACTION INTENT EXECUTION ===
+
+  /**
+   * Executes a semantic ActionIntent through the full physical & posture pipeline.
+   */
+  async executeActionIntent(intent, durationRange = [2500, 3500]) {
+    if (!this._loaded) return false;
+
+    // 1. PHYSICAL & SPATIAL VALIDATION
+    const valResult = PhysicalValidator.validateIntent(intent, this.worldState, this.worldModel);
+    if (!valResult.valid) {
+      Logger.warn(`[INTENT] Action rejected by PhysicalValidator: ${valResult.reason}`);
+      return false;
+    }
+    const safeIntent = valResult.sanitizedIntent || intent;
+
+    // 2. POSTURE TRANSITION (if required)
+    if (safeIntent.type === 'WALK') {
+      if (!this.postureGraph.transition(POSTURE.WALK_START)) {
+        return false;
+      }
+    } else if (safeIntent.type === 'SIT') {
+      if (!this.postureGraph.transition(POSTURE.SIT_PREPARE, { hasSurface: !!safeIntent.surface })) {
+        return false;
+      }
+      this.animation.play('sit_prepare');
+      await this.wait(1000);
+      this.postureGraph.transition(POSTURE.SITTING, { hasSurface: true });
+    }
+
+    // 3. ANIMATION RESOLUTION
+    const { animId } = this.animationResolver.resolve(
+      safeIntent,
+      this.postureGraph.current,
+      this.emotion,
+      this.emotion.energy
+    );
+
+    // 4. MULTI-LAYER DISPATCH
+    if (safeIntent.emotion) {
+      this.expression.setEmotion(safeIntent.emotion);
+    }
+    if (safeIntent.attention) {
+      this.lookAt.setAttention(
+        safeIntent.attention.target,
+        safeIntent.attention.duration,
+        safeIntent.attention.intensity
+      );
+    }
+
+    this.animation.play(animId);
+
+    // 5. LOCOMOTION HANDLING
+    if (safeIntent.type === 'WALK' && safeIntent.targetX !== undefined) {
+      this.postureGraph.transition(POSTURE.WALKING);
+      this.movement.walkTo(safeIntent.targetX);
+      await this.waitForArrival(7000);
+      this.postureGraph.transition(POSTURE.WALK_STOP);
+      this.postureGraph.transition(POSTURE.STANDING);
+    } else {
+      // Gesture / resting duration
+      const duration = Array.isArray(durationRange)
+        ? durationRange[0] + Math.random() * (durationRange[1] - durationRange[0])
+        : (durationRange || 3000);
+      await this.wait(duration);
+    }
+
+    // 6. RETURN TO SAFE POSTURE
+    if (this.postureGraph.current === POSTURE.STANDING) {
+      this.idle();
+    }
+    return true;
+  }
+
+  // === USER / BRAIN COMMAND INTERFACE ===
+
+  idle() {
+    this.movement.stop();
+    this.postureGraph.transition(POSTURE.STANDING);
+    this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
+    this.animation.play('idle');
+    this.expression.setEmotion('neutral');
+  }
+
+  walkTo(desktopX) {
+    this.executeActionIntent({
+      type: 'WALK',
+      targetX: desktopX,
+      emotion: 'neutral'
+    });
+  }
+
+  walkToDesktop(x) {
+    this.walkTo(x);
+  }
+
+  goHome() {
+    this.executeActionIntent({
+      type: 'WALK',
+      targetX: this.worldModel.homeDesktopX,
+      emotion: 'neutral'
+    });
+  }
+
+  jump() {
+    if (this.worldState.isGrounded) {
+      this.postureGraph.transition(POSTURE.FALLING);
+      this.movement.jump();
+      this.animation.play('jump');
+    }
+  }
+
+  sit() {
+    this.executeActionIntent({
+      type: 'SIT',
+      surface: this.worldState.supportSurface || this.worldModel.groundSurface,
+      emotion: 'neutral'
+    }, 10000);
+  }
+
+  sleep() {
+    this.executeActionIntent({
+      type: 'REST',
+      emotion: 'sleepy'
+    }, 12000);
+  }
+
+  wake() {
+    if (this.postureGraph.transition(POSTURE.WAKING)) {
+      this.animation.play('stretch');
+      this.expression.setEmotion('happy');
+      setTimeout(() => {
+        this.idle();
+      }, 2000);
+    }
+  }
+
+  pet() {
+    this.emotion.onPetting();
+    this.executeActionIntent({
+      type: 'PET',
+      emotion: 'happy',
+      attention: { target: ATTENTION_TARGET.USER, duration: 3.0, intensity: 0.9 }
+    }, 2800);
+  }
+
+  stopAction() {
+    this.movement.stop();
+    this.idle();
+  }
+
+  setEmotion(name) {
+    this.expression.setEmotion(name);
+  }
+
+  playAnimation(name) {
+    this.animation.play(name);
+  }
+
+  speak(text, durationMs = null) {
+    this.voice.speak(text, durationMs);
+  }
+
+  // === ASYNC HELPERS ===
+
   wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   waitForArrival(timeoutMs = 10000) {
     return new Promise(resolve => {
-      const startTime = Date.now();
+      const start = Date.now();
       const check = setInterval(() => {
-        if (!this.movement.isMoving || (Date.now() - startTime) >= timeoutMs) {
+        if (!this.movement.isMoving || (Date.now() - start) >= timeoutMs) {
           clearInterval(check);
           resolve();
         }
@@ -88,230 +272,62 @@ export class CharacterController {
     });
   }
 
-  // === Core Actions API ===
-
-  idle() {
-    this.movement.stop();
-    this._currentWindowAnchor = null;
-    this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
-  }
-
-  walkTo(desktopX) {
-    this._currentWindowAnchor = null;
-    if (this.state.transition(STATE.WALKING, PRIORITY.AUTONOMOUS)) {
-      this.movement.walkTo(desktopX);
-    }
-  }
-
-  walkToDesktop(x) { this.walkTo(x); }
-
-  goHome() {
-    this._currentWindowAnchor = null;
-    if (this.state.transition(STATE.RETURNING_HOME, PRIORITY.AUTONOMOUS)) {
-      this.movement.walkTo(this.desktop.homeX);
-    }
-  }
-
-  jump() {
-    if (this.state.transition(STATE.JUMPING, PRIORITY.AUTONOMOUS)) {
-      this.movement.jump();
-    }
-  }
-
-  sit() {
-    this.movement.stop();
-    this.state.transition(STATE.SITTING, PRIORITY.USER_COMMAND);
-  }
-
-  /**
-   * Sit on top edge of a desktop window.
-   */
-  async sitOnWindow(windowId = null) {
-    let win = null;
-    if (windowId) {
-      win = this.windowManager.windows.find(w => w.id === windowId);
-    }
-    if (!win) {
-      win = this.windowManager.activeWindow || this.windowManager.windows[0];
-    }
-
-    if (!win) {
-      this.sit(); // Fallback to ground sitting if no window
-      return false;
-    }
-
-    this._currentWindowAnchor = win;
-    // Walk to window center
-    this.walkTo(win.platformX);
-    await this.waitForArrival(8000);
-
-    // Transition to sitting on top edge
-    this.sit();
-    this.expression.setEmotion('happy');
-    return true;
-  }
-
-  sleep() {
-    this.movement.stop();
-    this.state.transition(STATE.SLEEPING, PRIORITY.AUTONOMOUS);
-  }
-
-  wake() {
-    this.state.transition(STATE.WAKING, PRIORITY.USER_COMMAND);
-    this.emotion.onRest();
-    setTimeout(() => {
-      try { this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS); } catch (e) {}
-    }, 1500);
-  }
-
-  rest() {
-    this.goHome();
-    this.emotion.onRest();
-  }
-
-  followMouse() {
-    this._mouseMode = 'FOLLOW';
-    this.state.transition(STATE.FOLLOWING_MOUSE, PRIORITY.INTERACTION);
-  }
-
-  stopFollowingMouse() {
-    this._mouseMode = 'LOOK_ONLY';
-    this.movement.stop();
-    if (this.state.state === STATE.FOLLOWING_MOUSE) {
-      this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
-    }
-  }
-
-  lookAtMouse() { this._mouseMode = 'LOOK_ONLY'; }
-
-  setEmotion(name) { this.expression.setEmotion(name); }
-  playAnimation(name) { this.animation.play(name); }
-
-  stopAction() {
-    this.movement.stop();
-    this.animation.play('idle');
-    this.state.transition(STATE.IDLE, PRIORITY.USER_COMMAND);
-  }
-
-  speak(text, durationMs = null) {
-    this.voice.speak(text, durationMs);
-  }
-
-  pet() {
-    this.emotion.onPetting();
-    this.state.transition(STATE.INTERACTING, PRIORITY.INTERACTION);
-    this.animation.play('pet');
-    this.expression.setEmotion('happy');
-    setTimeout(() => {
-      if (this.state.state === STATE.INTERACTING) {
-        this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
-        this.expression.setEmotion('neutral');
-      }
-    }, 2500);
-  }
-
-  // === MAIN UPDATE LOOP (Called once from renderer.js animate) ===
+  // === MAIN UPDATE LOOP (Single RAF Tick) ===
 
   update(delta) {
     if (!this._loaded) return;
-    try {
-      const dt = Math.min(delta, CONFIG.performance.maxDeltaTime);
 
-      // 1. Natural autonomous lookAt update (glancing around)
+    try {
+      const dt = Math.min(delta, CONFIG.performance.maxDeltaTime || 0.033);
+
+      // 1. Natural autonomous gaze
       this.lookAt.update(dt);
 
-      // 2. Follow mouse mode (if explicitly enabled)
-      if (this._mouseMode === 'FOLLOW') {
-        const dx = this.mouse.x - this.movement.desktopX;
-        if (Math.abs(dx) > CONFIG.mouse.followDeadZone) {
-          this.movement.walkTo(this.mouse.x);
-          if (this.state.state === STATE.IDLE || this.state.state === STATE.FOLLOWING_MOUSE) {
-            this.state.transition(STATE.WALKING, PRIORITY.INTERACTION);
-          }
-        }
-      }
-
-      // 3. Movement update
+      // 2. Authoritative Grounded Movement Update
       this.movement.update(dt);
 
-      // 4. Auto-transitions
-      const st = this.state.state;
-      if (st === STATE.WALKING && !this.movement.isMoving) {
-        this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
+      // 3. Posture synchronization with locomotion state
+      if (this.postureGraph.current === POSTURE.WALKING && !this.movement.isMoving) {
+        this.postureGraph.transition(POSTURE.WALK_STOP);
+        this.postureGraph.transition(POSTURE.STANDING);
+        this.animation.play('idle');
       }
-      if (st === STATE.RETURNING_HOME && !this.movement.isMoving) {
-        this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS);
-      }
-      if (st === STATE.JUMPING && !this.movement.isAirborne && !this.movement.isMoving) {
-        this.state.transition(STATE.LANDING, PRIORITY.AUTONOMOUS);
+
+      // 4. Airborne / landing synchronization
+      if (this.postureGraph.current === POSTURE.FALLING && this.worldState.isGrounded) {
+        this.postureGraph.transition(POSTURE.LANDING);
         this.animation.play('land');
         setTimeout(() => {
-          try { this.state.transition(STATE.IDLE, PRIORITY.AUTONOMOUS); } catch (e) {}
+          if (this.postureGraph.current === POSTURE.LANDING) {
+            this.idle();
+          }
         }, 400);
       }
 
-      // 5. Autonomous Behavior Engine update (Spec Section 37)
+      // 5. Autonomous Behavior Engine update
       this.idleBehavior.update(dt);
 
-      // 6. Animation update
+      // 6. Layered Animation Blender with Anatomical Joint Clamping
       this.animation.update(dt);
 
-      // 7. VRM update (spring bones etc)
+      // 7. VRM Spring bone simulation
       this.vrm.update(dt);
+
     } catch (e) {
-      console.error('[AO] Update error:', e);
+      Logger.error('[AO] Update error, activating recovery:', e);
+      PhysicalValidator.applySafeIdle(this.worldState, this.vrm, this.worldModel);
     }
   }
 
-  _onStateChange(old, next) {
-    try {
-      const animMap = {
-        [STATE.IDLE]: 'idle',
-        [STATE.WALKING]: 'walk',
-        [STATE.RUNNING]: 'run',
-        [STATE.JUMPING]: 'jump',
-        [STATE.FALLING]: 'jump',
-        [STATE.LANDING]: 'land',
-        [STATE.SITTING]: 'sit',
-        [STATE.READING]: 'read',
-        [STATE.SLEEPING]: 'sleep',
-        [STATE.WAKING]: 'idle',
-        [STATE.RETURNING_HOME]: 'walk',
-        [STATE.FOLLOWING_MOUSE]: 'idle',
-        [STATE.INTERACTING]: 'pet',
-        [STATE.THINKING]: 'think',
-        [STATE.CURIOUS]: 'confused',
-        [STATE.STRETCHING]: 'stretch',
-        [STATE.YAWNING]: 'yawn',
-        [STATE.SLEEPY]: 'sleep',
-        [STATE.RESTING]: 'sit',
-        [STATE.SHY_REACTION]: 'shy',
-        [STATE.HAPPY_REACTION]: 'bounce',
-        [STATE.CONFUSED_REACTION]: 'confused',
-        [STATE.SURPRISED_REACTION]: 'wave',
-        [STATE.PLAYFUL]: 'bounce',
-        [STATE.RETURN_TO_IDLE]: 'idle',
-      };
-      const anim = animMap[next];
-      if (anim) this.animation.play(anim);
-
-      // Stop movement on static states
-      if ([
-        STATE.IDLE, STATE.SITTING, STATE.SLEEPING, STATE.READING, STATE.LANDING,
-        STATE.DISABLED, STATE.INTERACTING, STATE.THINKING, STATE.CURIOUS,
-        STATE.STRETCHING, STATE.YAWNING, STATE.SLEEPY, STATE.RESTING,
-        STATE.SHY_REACTION, STATE.RETURN_TO_IDLE
-      ].includes(next)) {
-        this.movement.stop();
-      }
-
-      // Emotion-linked expressions
-      if (next === STATE.SLEEPING) this.expression.setEmotion('sleepy');
-      if (next === STATE.WAKING) this.expression.setEmotion('neutral');
-    } catch (e) { /* safe */ }
+  _onPostureChanged(prev, next) {
+    this.worldState.setPosture(next);
+    // Sync with legacy state for IPC/Bridge
+    if (next === POSTURE.STANDING) this.state.state = STATE.IDLE;
+    if (next === POSTURE.WALKING) this.state.state = STATE.WALKING;
+    if (next === POSTURE.SITTING) this.state.state = STATE.SITTING;
+    if (next === POSTURE.SLEEPING) this.state.state = STATE.SLEEPING;
   }
 
-  // === Brain semantic command dispatcher ===
   executeCommand(cmd) {
     return this.bridge._executeSemanticCommand(cmd);
   }
@@ -328,6 +344,6 @@ export class CharacterController {
       this.expression.dispose();
       this.animation.dispose();
       this.vrm.dispose();
-    } catch (e) { /* safe */ }
+    } catch (e) {}
   }
 }
