@@ -4,12 +4,15 @@
  */
 export const ACTION_PRIORITY = Object.freeze({
   EMERGENCY: 0,
-  SAFETY: 1,
+  SYSTEM: 1,
+  SAFETY: 1, // alias for safety invariants
   USER_COMMAND: 2,
   BRAIN_COMMAND: 3,
-  WORLD_EVENT: 4,
-  AUTONOMOUS: 5,
-  IDLE: 6
+  IMPORTANT_REACTION: 4,
+  WORLD_EVENT: 5,
+  INTERACTION: 6,
+  AUTONOMOUS: 7,
+  IDLE: 8
 });
 
 /**
