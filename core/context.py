@@ -200,10 +200,11 @@ class ContextBuilder:
         self.world_state_mgr = world_state_mgr or default_world_state
         self.short_term_mem = short_term_mem or default_short_term_memory
 
-    def build_system_context(self, user_request: str) -> str:
+    def build_system_context(self, user_request: str, max_chars: int = 1200) -> str:
         """
         Builds the consolidated contextual header containing Identity,
         relevant persistent memories, verified world state, and recent conversation.
+        Bounded by `max_chars` to keep local 2K-context inference fast on 8 GB RAM.
         """
         sections: List[str] = []
 
@@ -220,16 +221,31 @@ class ContextBuilder:
         if short_term_snip:
             sections.append(short_term_snip)
 
-        # 4. Relevant Memories (Relevance-filtered from user request)
+        # 4. Relevant Memories (Relevance-filtered, verified-first, deduplicated, conflict-checked)
         if user_request:
-            memories: List[MemoryRecord] = self.memory_store.search_memories(user_request, limit=3)
+            memories: List[MemoryRecord] = self.memory_store.search_memories(user_request, limit=5)
             if memories:
+                # Prioritize verified memories first, then relevance & recency
+                memories.sort(key=lambda m: (bool(getattr(m, "verified", True)), getattr(m, "relevance_score", 0.0), m.updated_at), reverse=True)
+                seen_pairs = set()
+                key_values: Dict[str, set] = {}
                 mem_lines = ["RELEVANT MEMORIES:"]
-                for m in memories:
+                for m in memories[:3]:
+                    pair = (m.key.lower(), m.value.strip().lower())
+                    if pair in seen_pairs:
+                        continue
+                    seen_pairs.add(pair)
+                    key_values.setdefault(m.key.lower(), set()).add(m.value.strip())
                     mem_lines.append(f"- [{m.memory_type}] {m.key}: {m.value}")
+                for k, vals in key_values.items():
+                    if len(vals) > 1:
+                        mem_lines.append(f"- [CONFLICT] Multiple values for '{k}': {', '.join(sorted(vals))}")
                 sections.append("\n".join(mem_lines))
 
-        return "\n\n".join(sections)
+        ctx = "\n\n".join(sections)
+        if len(ctx) > max_chars:
+            ctx = ctx[:max_chars].rsplit("\n", 1)[0]
+        return ctx
 
 
 default_context_builder = ContextBuilder()

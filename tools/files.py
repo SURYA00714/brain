@@ -388,6 +388,27 @@ def file_info(target_path: str, safe_roots=None) -> Dict[str, Any]:
         return {"success": False, "tool": "FILE_INFO", "error": f"Failed to retrieve file info: {str(e)}"}
 
 
+def write_text_file(filepath: str, content: str = "", safe_roots=None) -> Dict[str, Any]:
+    """Writes text content to a file inside safe directories. Creates parent folders if needed."""
+    if not filepath or not filepath.strip():
+        return {"success": False, "tool": "WRITE_TEXT_FILE", "error": "Filepath cannot be empty."}
+
+    candidate = resolve_location_alias(filepath)
+    validated, err = validate_safe_path(candidate, safe_roots=safe_roots, allow_nonexistent=True)
+    if err or not validated:
+        return {"success": False, "tool": "WRITE_TEXT_FILE", "error": err or "Access Denied."}
+
+    try:
+        validated.parent.mkdir(parents=True, exist_ok=True)
+        validated.write_text(content, encoding="utf-8")
+        return {
+            "success": True,
+            "tool": "WRITE_TEXT_FILE",
+            "data": f"Wrote {len(content)} characters to '{validated.name}'."
+        }
+    except Exception as e:
+        return {"success": False, "tool": "WRITE_TEXT_FILE", "error": f"Failed to write file: {str(e)}"}
+
 def delete_file(target_path: str, confirmed: bool = False, safe_roots=None) -> Dict[str, Any]:
     """Deletes a file or folder (Confirmation Gated)."""
     import shutil

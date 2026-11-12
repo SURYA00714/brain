@@ -26,7 +26,12 @@ class TestPhase17GenuineIntelligence(unittest.TestCase):
     def setUp(self):
         default_app_tracker.clear()
         default_world_state.sync_from_system()
+        default_world_state.current_state.running_apps = []
+        default_world_state.current_state.focused_app = None
+        default_world_state.current_state.active_application = None
+        default_world_state.current_state.active_window = None
         default_short_term_memory.clear()
+        default_telemetry._history.clear()
 
     def test_01_educational_query_fast_safe_zero_llm_calls(self):
         """'how does rm -rf work?' returns safe educational explanation in <100ms with 0 LLM calls."""

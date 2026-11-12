@@ -258,7 +258,39 @@ def screen_prompt_safety(user_request: str) -> Tuple[bool, Optional[str]]:
         if re.search(pattern, normalized):
             return False, f"Brain Safety Block: Destructive administrative command (matching '{pattern}') is prohibited."
 
+    # 3. Prompt Injection & Credential Exfiltration Screen
+    injection_override = re.search(
+        r"\b(?:ignore|bypass|override|disregard)\s+(?:all\s+)?(?:previous|prior|system|safety)\s+(?:instructions|protocols|rules|policies)\b",
+        normalized
+    )
+    cred_exfil = re.search(
+        r"\b(?:print|show|reveal|dump|leak|output|display|give\s+me)\b[^.]{0,60}\b(?:api\s*keys?|passwords?|secrets?|tokens?|credentials?|private\s*keys?)\b",
+        normalized
+    )
+    if injection_override or cred_exfil:
+        return False, "Brain Safety Block: Prompt injection or credential disclosure request is not allowed. I cannot access or share private credentials."
+
     return True, None
+
+
+def validate_safe_output(output_text: str) -> Tuple[bool, str]:
+    """
+    Validates model/tool output against accidental credential or key leakage
+    while preserving legitimate cybersecurity explanations.
+    """
+    if not output_text or not isinstance(output_text, str):
+        return True, ""
+    leak_patterns = [
+        r"\bgsk_[a-zA-Z0-9_-]{20,}\b",
+        r"\bAIza[0-9A-Za-z-_]{35}\b",
+        r"\bsk-[a-zA-Z0-9_-]{20,}\b",
+        r"\bghp_[a-zA-Z0-9]{36}\b",
+        r"-----BEGIN (?:RSA|OPENSSH|PGP|PRIVATE) KEY-----",
+    ]
+    for pat in leak_patterns:
+        if re.search(pat, output_text):
+            return False, "Brain Safety Block: Output suppressed because it contained a sensitive credential pattern."
+    return True, output_text
 
 
 

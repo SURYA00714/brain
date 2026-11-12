@@ -1,0 +1,38 @@
+{
+  "model_id": "qwen3.5:2b-q4_K_M",
+  "sample_size": 30,
+  "strategies": {
+    "DIRECT_RESPONSE": {
+      "tested": 12,
+      "passed": 11,
+      "accuracy_pct": 91.7,
+      "false_rejection_rate_pct": 0.0,
+      "avg_latency_ms": 5280.8,
+      "avg_model_calls": 1.0
+    },
+    "MATHEMATICAL_VERIFICATION": {
+      "tested": 2,
+      "passed": 1,
+      "accuracy_pct": 50.0,
+      "false_rejection_rate_pct": 0.0,
+      "avg_latency_ms": 15635.6,
+      "avg_model_calls": 1.0
+    },
+    "STEP_BY_STEP_DECOMPOSITION": {
+      "tested": 15,
+      "passed": 13,
+      "accuracy_pct": 86.7,
+      "false_rejection_rate_pct": 0.0,
+      "avg_latency_ms": 8663.4,
+      "avg_model_calls": 1.0
+    },
+    "TOOL_ASSISTED_REASONING": {
+      "tested": 1,
+      "passed": 0,
+      "accuracy_pct": 0.0,
+      "false_rejection_rate_pct": 0.0,
+      "avg_latency_ms": 13097.4,
+      "avg_model_calls": 1.0
+    }
+  }
+}

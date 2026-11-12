@@ -1,0 +1,2058 @@
+{
+  "version": "6.0.0",
+  "name": "Brain Phase 2.0 Independent 150-Case Reasoning Benchmark",
+  "description": "150 unseen cases across 15 reasoning categories for separate Track A (Base Model) vs Track B (Brain System) evaluation.",
+  "cases": [
+    {
+      "id": "MSL_01",
+      "category": "Multi-step Logical Reasoning",
+      "input": "All nodes in cluster A are encrypted. Server 7 is in cluster A. Encrypted nodes require TLS. Does Server 7 require TLS? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_02",
+      "category": "Multi-step Logical Reasoning",
+      "input": "If a build fails, deployment stops. If deployment stops, alerts fire. The build failed. Did alerts fire? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_03",
+      "category": "Multi-step Logical Reasoning",
+      "input": "No offline service can reach external APIs. Service M is offline. Can Service M reach external APIs? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_04",
+      "category": "Multi-step Logical Reasoning",
+      "input": "Every cache miss triggers a DB read. A DB read adds 10ms. There were 3 cache misses. How many ms were added?",
+      "evaluation_criteria": {
+        "required_any": [
+          "30"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_05",
+      "category": "Multi-step Logical Reasoning",
+      "input": "If P implies Q, and Q implies R, and R is false, is P true or false?",
+      "evaluation_criteria": {
+        "required_any": [
+          "false"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_06",
+      "category": "Multi-step Logical Reasoning",
+      "input": "Alice finished before Bob. Bob finished before Carol. Who finished first?",
+      "evaluation_criteria": {
+        "required_any": [
+          "alice"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_07",
+      "category": "Multi-step Logical Reasoning",
+      "input": "Room 1 is larger than Room 2. Room 3 is smaller than Room 2. Which room is smallest?",
+      "evaluation_criteria": {
+        "required_any": [
+          "3",
+          "room 3"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_08",
+      "category": "Multi-step Logical Reasoning",
+      "input": "All routers in Zone B use IPv6. Device K does not use IPv6. Is Device K in Zone B? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_09",
+      "category": "Multi-step Logical Reasoning",
+      "input": "A task needs 2 workers for 6 hours. With 3 workers at the same rate, how many hours does it take?",
+      "evaluation_criteria": {
+        "required_any": [
+          "4"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MSL_10",
+      "category": "Multi-step Logical Reasoning",
+      "input": "If X is true then Y is false. Y is true. What is X?",
+      "evaluation_criteria": {
+        "required_any": [
+          "false"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_01",
+      "category": "Mathematical Word Problems",
+      "input": "A store reduces a 200 dollar item by 25%. What is the sale price?",
+      "evaluation_criteria": {
+        "required_any": [
+          "150"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_02",
+      "category": "Mathematical Word Problems",
+      "input": "A train travels 180 km in 3 hours. What is its average speed in km/h?",
+      "evaluation_criteria": {
+        "required_any": [
+          "60"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_03",
+      "category": "Mathematical Word Problems",
+      "input": "If 5 notebooks cost 35 dollars, how much do 8 notebooks cost?",
+      "evaluation_criteria": {
+        "required_any": [
+          "56"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_04",
+      "category": "Mathematical Word Problems",
+      "input": "A tank holds 500 liters and is 40% full. How many liters are in the tank?",
+      "evaluation_criteria": {
+        "required_any": [
+          "200"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_05",
+      "category": "Mathematical Word Problems",
+      "input": "A worker earns 20 dollars per hour and works 7 hours. How much does she earn?",
+      "evaluation_criteria": {
+        "required_any": [
+          "140"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_06",
+      "category": "Mathematical Word Problems",
+      "input": "Three numbers average 15. Two of them are 10 and 20. What is the third number?",
+      "evaluation_criteria": {
+        "required_any": [
+          "15"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_07",
+      "category": "Mathematical Word Problems",
+      "input": "A rectangle has length 9 and width 4. What is its area?",
+      "evaluation_criteria": {
+        "required_any": [
+          "36"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_08",
+      "category": "Mathematical Word Problems",
+      "input": "A rectangle has length 9 and width 4. What is its perimeter?",
+      "evaluation_criteria": {
+        "required_any": [
+          "26"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_09",
+      "category": "Mathematical Word Problems",
+      "input": "If a battery drains 15% per hour, how much remains after 4 hours from 100%?",
+      "evaluation_criteria": {
+        "required_any": [
+          "40"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MWP_10",
+      "category": "Mathematical Word Problems",
+      "input": "A book has 240 pages. You read 30 pages a day. How many days to finish?",
+      "evaluation_criteria": {
+        "required_any": [
+          "8"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_01",
+      "category": "Abstract Reasoning",
+      "input": "In a pattern: A1, B2, C3, D4, what comes next?",
+      "evaluation_criteria": {
+        "required_any": [
+          "e5"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_02",
+      "category": "Abstract Reasoning",
+      "input": "If CIRCLE maps to 1 and SQUARE maps to 4, how many corners does TRIANGLE have?",
+      "evaluation_criteria": {
+        "required_any": [
+          "3"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_03",
+      "category": "Abstract Reasoning",
+      "input": "next number in sequence 7, 14, 21, 28",
+      "evaluation_criteria": {
+        "required_any": [
+          "35"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_04",
+      "category": "Abstract Reasoning",
+      "input": "next number in sequence 100, 90, 81, 73, 66",
+      "evaluation_criteria": {
+        "required_any": [
+          "60"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_05",
+      "category": "Abstract Reasoning",
+      "input": "Which is the odd one out: Python, Rust, Java, Linux?",
+      "evaluation_criteria": {
+        "required_any": [
+          "linux"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_06",
+      "category": "Abstract Reasoning",
+      "input": "Which is the odd one out: SSD, RAM, CPU, HTML?",
+      "evaluation_criteria": {
+        "required_any": [
+          "html"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_07",
+      "category": "Abstract Reasoning",
+      "input": "If + means multiply and * means add, what is 3 + 4 * 2?",
+      "evaluation_criteria": {
+        "required_any": [
+          "14",
+          "10"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_08",
+      "category": "Abstract Reasoning",
+      "input": "Mirror of word \"ab\" backwards is what?",
+      "evaluation_criteria": {
+        "required_any": [
+          "ba"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_09",
+      "category": "Abstract Reasoning",
+      "input": "next number in sequence 2, 4, 8, 16, 32",
+      "evaluation_criteria": {
+        "required_any": [
+          "64"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "ABR_10",
+      "category": "Abstract Reasoning",
+      "input": "If RED=3, BLUE=4, GREEN=5, what is ORANGE?",
+      "evaluation_criteria": {
+        "required_any": [
+          "6"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_01",
+      "category": "Causal Reasoning",
+      "input": "When the cooling fan stopped, CPU temperature rose to 95C and the laptop throttled. What caused the throttling?",
+      "evaluation_criteria": {
+        "required_any": [
+          "fan",
+          "temperature",
+          "heat"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_02",
+      "category": "Causal Reasoning",
+      "input": "A memory leak caused swap usage to reach 100%, slowing the UI. What was the root cause?",
+      "evaluation_criteria": {
+        "required_any": [
+          "memory leak",
+          "leak"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_03",
+      "category": "Causal Reasoning",
+      "input": "Unplugging the ethernet cable dropped all network sockets. What caused the disconnect?",
+      "evaluation_criteria": {
+        "required_any": [
+          "cable",
+          "ethernet",
+          "unplug"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_04",
+      "category": "Causal Reasoning",
+      "input": "Rain made the road wet, causing longer braking distance. Why did braking distance increase?",
+      "evaluation_criteria": {
+        "required_any": [
+          "wet",
+          "rain",
+          "friction"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_05",
+      "category": "Causal Reasoning",
+      "input": "Turning off the breaker cut power to the router, so Wi-Fi went down. What caused Wi-Fi to go down?",
+      "evaluation_criteria": {
+        "required_any": [
+          "breaker",
+          "power"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_06",
+      "category": "Causal Reasoning",
+      "input": "Leaving debug logging on filled the 50 GB disk, causing database writes to fail. Why did writes fail?",
+      "evaluation_criteria": {
+        "required_any": [
+          "disk",
+          "full",
+          "logging",
+          "space"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_07",
+      "category": "Causal Reasoning",
+      "input": "Adding an index reduced query time from 800ms to 5ms. Why did the query speed up?",
+      "evaluation_criteria": {
+        "required_any": [
+          "index"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_08",
+      "category": "Causal Reasoning",
+      "input": "Forgetting to close file handles caused Too Many Open Files errors. What caused the error?",
+      "evaluation_criteria": {
+        "required_any": [
+          "file handle",
+          "open files",
+          "close"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_09",
+      "category": "Causal Reasoning",
+      "input": "Setting timeout to 0.01s caused valid API calls to abort. Why did API calls abort?",
+      "evaluation_criteria": {
+        "required_any": [
+          "timeout"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CAR_10",
+      "category": "Causal Reasoning",
+      "input": "Running two 4GB models on an 8GB machine triggered OOM kill. Why did OOM happen?",
+      "evaluation_criteria": {
+        "required_any": [
+          "ram",
+          "memory",
+          "two",
+          "8gb"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_01",
+      "category": "Deductive Reasoning",
+      "input": "All prime numbers greater than 2 are odd. 17 is a prime > 2. Is 17 odd? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_02",
+      "category": "Deductive Reasoning",
+      "input": "All mammals are warm-blooded. Whales are mammals. Are whales warm-blooded? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_03",
+      "category": "Deductive Reasoning",
+      "input": "No reptile has fur. A gecko is a reptile. Does a gecko have fur? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_04",
+      "category": "Deductive Reasoning",
+      "input": "Every square is a rectangle. Shape S is a square. Is Shape S a rectangle? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_05",
+      "category": "Deductive Reasoning",
+      "input": "All valid JSON keys must be strings. Key K is an integer. Is Key K valid JSON? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_06",
+      "category": "Deductive Reasoning",
+      "input": "All triangles have 3 sides. Polygon P has 4 sides. Is P a triangle? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_07",
+      "category": "Deductive Reasoning",
+      "input": "Every Linux process has a PID. Bash is running as a Linux process. Does Bash have a PID? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_08",
+      "category": "Deductive Reasoning",
+      "input": "No read-only filesystem allows file creation. /mnt/ro is read-only. Can you create a file there? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_09",
+      "category": "Deductive Reasoning",
+      "input": "All birds have feathers. A penguin is a bird. Does a penguin have feathers? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "DED_10",
+      "category": "Deductive Reasoning",
+      "input": "If a number ends in 0, it is divisible by 5. 40 ends in 0. Is 40 divisible by 5? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_01",
+      "category": "Inductive Reasoning",
+      "input": "Observed: Sun rose in the east on Mon, Tue, Wed, Thu. What direction will it likely rise on Friday?",
+      "evaluation_criteria": {
+        "required_any": [
+          "east"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_02",
+      "category": "Inductive Reasoning",
+      "input": "Observed outputs for f(x): f(1)=2, f(2)=4, f(3)=6, f(4)=8. What is f(5)?",
+      "evaluation_criteria": {
+        "required_any": [
+          "10"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_03",
+      "category": "Inductive Reasoning",
+      "input": "Every swan seen in this park so far is white. What is the next swan most likely colored?",
+      "evaluation_criteria": {
+        "required_any": [
+          "white"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_04",
+      "category": "Inductive Reasoning",
+      "input": "Observed: 3, 9, 27, 81. What is the next number?",
+      "evaluation_criteria": {
+        "required_any": [
+          "243"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_05",
+      "category": "Inductive Reasoning",
+      "input": "Every time the script ran at midnight, backup succeeded. What is the expected outcome tonight at midnight?",
+      "evaluation_criteria": {
+        "required_any": [
+          "succeed",
+          "success"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_06",
+      "category": "Inductive Reasoning",
+      "input": "Observed: f(2)=5, f(3)=10, f(4)=17, f(5)=26. What is f(6)?",
+      "evaluation_criteria": {
+        "required_any": [
+          "37"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_07",
+      "category": "Inductive Reasoning",
+      "input": "In 5 trials, adding salt lowered water freezing point. What does adding salt do to freezing point?",
+      "evaluation_criteria": {
+        "required_any": [
+          "lower",
+          "decrease",
+          "drop"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_08",
+      "category": "Inductive Reasoning",
+      "input": "Observed: 1, 2, 4, 7, 11. What is the next number?",
+      "evaluation_criteria": {
+        "required_any": [
+          "16"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_09",
+      "category": "Inductive Reasoning",
+      "input": "Every .py file in src/ has a unit test. A new .py file is added. What should exist for it?",
+      "evaluation_criteria": {
+        "required_any": [
+          "test"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "IND_10",
+      "category": "Inductive Reasoning",
+      "input": "Observed: 50, 45, 40, 35. What is the next number?",
+      "evaluation_criteria": {
+        "required_any": [
+          "30"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_01",
+      "category": "Conditional Reasoning",
+      "input": "If it rains, the match is cancelled. It rained. Is the match cancelled? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_02",
+      "category": "Conditional Reasoning",
+      "input": "If battery < 10%, enable power saver. Battery is 25%. Should power saver be enabled by this rule? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_03",
+      "category": "Conditional Reasoning",
+      "input": "If user is admin OR owner, allow edit. User is owner. Is edit allowed? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_04",
+      "category": "Conditional Reasoning",
+      "input": "If A AND B are true, return 1, else 0. A=True, B=False. What is returned?",
+      "evaluation_criteria": {
+        "required_any": [
+          "0"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_05",
+      "category": "Conditional Reasoning",
+      "input": "If port 443 is closed, HTTPS fails. Port 443 is open. Does this rule guarantee HTTPS succeeds? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_06",
+      "category": "Conditional Reasoning",
+      "input": "Unless disk < 5GB, do not prune logs. Disk is 12GB. Should logs be pruned? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_07",
+      "category": "Conditional Reasoning",
+      "input": "If temperature > 80C, throttle CPU. Temp is 85C. What happens?",
+      "evaluation_criteria": {
+        "required_any": [
+          "throttle"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_08",
+      "category": "Conditional Reasoning",
+      "input": "If x > 10 then y = x * 2 else y = x + 1. If x = 5, what is y?",
+      "evaluation_criteria": {
+        "required_any": [
+          "6"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_09",
+      "category": "Conditional Reasoning",
+      "input": "If x > 10 then y = x * 2 else y = x + 1. If x = 12, what is y?",
+      "evaluation_criteria": {
+        "required_any": [
+          "24"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CON_10",
+      "category": "Conditional Reasoning",
+      "input": "Only if token is valid, grant access. Token is invalid. Is access granted? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_01",
+      "category": "Constraint Satisfaction",
+      "input": "Pick a number between 10 and 20 that is divisible by 7.",
+      "evaluation_criteria": {
+        "required_any": [
+          "14"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_02",
+      "category": "Constraint Satisfaction",
+      "input": "Order tasks A, B, C so A is before C and B is after C.",
+      "evaluation_criteria": {
+        "required_any": [
+          "a",
+          "b",
+          "c"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_03",
+      "category": "Constraint Satisfaction",
+      "input": "Find two integers summing to 10 whose product is 21.",
+      "evaluation_criteria": {
+        "required_any": [
+          "3",
+          "7"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_04",
+      "category": "Constraint Satisfaction",
+      "input": "Pick an even prime number.",
+      "evaluation_criteria": {
+        "required_any": [
+          "2"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_05",
+      "category": "Constraint Satisfaction",
+      "input": "List two fruits without using the letter e.",
+      "evaluation_criteria": {
+        "required_any": [
+          "kiwi",
+          "mango",
+          "plum",
+          "banana",
+          "papaya",
+          "guava"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_06",
+      "category": "Constraint Satisfaction",
+      "input": "Find a number > 20 and < 30 divisible by both 3 and 4.",
+      "evaluation_criteria": {
+        "required_any": [
+          "24"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_07",
+      "category": "Constraint Satisfaction",
+      "input": "You have 3 slots. X cannot be first. Y must be last. Z is remaining. Who is first?",
+      "evaluation_criteria": {
+        "required_any": [
+          "z"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_08",
+      "category": "Constraint Satisfaction",
+      "input": "Find a 2-digit number where both digits are equal and sum to 8.",
+      "evaluation_criteria": {
+        "required_any": [
+          "44"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_09",
+      "category": "Constraint Satisfaction",
+      "input": "Schedule M and N in 2 slots where N must precede M. Who is in slot 1?",
+      "evaluation_criteria": {
+        "required_any": [
+          "n"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CSA_10",
+      "category": "Constraint Satisfaction",
+      "input": "Pick a multiple of 9 between 20 and 30.",
+      "evaluation_criteria": {
+        "required_any": [
+          "27"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "PLR_01",
+      "category": "Planning Under Limited Resources",
+      "input": "You have 8 GB RAM. OS uses 2 GB. Model A uses 2 GB, Model B uses 6 GB. Which model fits safely?",
+      "evaluation_criteria": {
+        "required_any": [
+          "model a",
+          "a"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_02",
+      "category": "Planning Under Limited Resources",
+      "input": "Battery is at 5% with 10 minutes left. You must back up a 1MB file or render a 2-hour video. Which should you do?",
+      "evaluation_criteria": {
+        "required_any": [
+          "back up",
+          "backup",
+          "file"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_03",
+      "category": "Planning Under Limited Resources",
+      "input": "Disk has 500 MB free. Can you download a 2 GB ISO? Answer Yes or No and explain briefly.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_04",
+      "category": "Planning Under Limited Resources",
+      "input": "You have 30 seconds before shutdown. Save open document or run full virus scan?",
+      "evaluation_criteria": {
+        "required_any": [
+          "save",
+          "document"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_05",
+      "category": "Planning Under Limited Resources",
+      "input": "Network bandwidth is 1 Mbps. Should you stream 4K video or fetch plain text logs?",
+      "evaluation_criteria": {
+        "required_any": [
+          "text",
+          "logs"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_06",
+      "category": "Planning Under Limited Resources",
+      "input": "CPU is at 98%. Should you launch a heavy compiler job now or wait until idle?",
+      "evaluation_criteria": {
+        "required_any": [
+          "wait",
+          "idle"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_07",
+      "category": "Planning Under Limited Resources",
+      "input": "You have 1 CPU core free and two tasks: 1s health check and 60s report. Which runs first for fast feedback?",
+      "evaluation_criteria": {
+        "required_any": [
+          "health",
+          "1s"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_08",
+      "category": "Planning Under Limited Resources",
+      "input": "Budget is 0 dollars (offline only). Should you call a paid cloud API or local Ollama?",
+      "evaluation_criteria": {
+        "required_any": [
+          "local",
+          "ollama"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_09",
+      "category": "Planning Under Limited Resources",
+      "input": "Swap is full and RAM is 95%. Should you close unused browser tabs or open 10 more?",
+      "evaluation_criteria": {
+        "required_any": [
+          "close"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "PLR_10",
+      "category": "Planning Under Limited Resources",
+      "input": "Only 100 tokens output budget left. Should the JSON plan use short or verbose descriptions?",
+      "evaluation_criteria": {
+        "required_any": [
+          "short"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CDD_01",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: The server is online. Statement 2: The server is offline. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_02",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: RAM is 8 GB. Statement 2: RAM is 16 GB. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_03",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Python is a language. Statement 2: Linux is an OS. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_04",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Auth is enabled. Statement 2: Auth is disabled. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_05",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: All files are read-only. Statement 2: File X is writable. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_06",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Port 22 is open. Statement 2: Port 22 is closed. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_07",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: CPU has 4 cores. Statement 2: RAM is 8 GB. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_08",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Task succeeded. Statement 2: Task failed completely. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_09",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Cache is active. Statement 2: Cache is inactive. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CDD_10",
+      "category": "Contradiction Detection",
+      "input": "Statement 1: Disk is 40% used. Statement 2: Disk is 85% used. Is there a contradiction? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_01",
+      "category": "Ambiguous Instructions",
+      "input": "fix this",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_02",
+      "category": "Ambiguous Instructions",
+      "input": "do this",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_03",
+      "category": "Ambiguous Instructions",
+      "input": "handle it",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_04",
+      "category": "Ambiguous Instructions",
+      "input": "update it",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_05",
+      "category": "Ambiguous Instructions",
+      "input": "explain this",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_06",
+      "category": "Ambiguous Instructions",
+      "input": "Send the file to him. (No recipient or file named). What is missing?",
+      "evaluation_criteria": {
+        "required_any": [
+          "who",
+          "which",
+          "file",
+          "recipient",
+          "missing",
+          "clarify"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_07",
+      "category": "Ambiguous Instructions",
+      "input": "Schedule a meeting for tomorrow. (No time or attendees). What is missing?",
+      "evaluation_criteria": {
+        "required_any": [
+          "time",
+          "attendee",
+          "who",
+          "when",
+          "missing",
+          "clarify"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_08",
+      "category": "Ambiguous Instructions",
+      "input": "Delete the old backup. (There are 5 backups). What should you ask first?",
+      "evaluation_criteria": {
+        "required_any": [
+          "which",
+          "confirm",
+          "clarify",
+          "date"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_09",
+      "category": "Ambiguous Instructions",
+      "input": "Make it faster. (No program or metric specified). What is missing?",
+      "evaluation_criteria": {
+        "required_any": [
+          "what",
+          "which",
+          "program",
+          "clarify",
+          "specify"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "AMB_10",
+      "category": "Ambiguous Instructions",
+      "input": "check it",
+      "evaluation_criteria": {
+        "required_any": [
+          "clarify",
+          "specify",
+          "what",
+          "which"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "CFR_01",
+      "category": "Counterfactual Reasoning",
+      "input": "If gravity on Earth suddenly doubled, would objects fall faster or slower?",
+      "evaluation_criteria": {
+        "required_any": [
+          "faster"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_02",
+      "category": "Counterfactual Reasoning",
+      "input": "If TCP did not retransmit lost packets, would file transfers be reliable or unreliable?",
+      "evaluation_criteria": {
+        "required_any": [
+          "unreliable",
+          "less reliable",
+          "corrupt"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_03",
+      "category": "Counterfactual Reasoning",
+      "input": "If a laptop had 0 bytes of RAM, could an OS boot normally? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_04",
+      "category": "Counterfactual Reasoning",
+      "input": "If DNS stopped working worldwide, could you still reach 1.1.1.1 by IP? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_05",
+      "category": "Counterfactual Reasoning",
+      "input": "If a sorted list were unsorted, would binary search still work reliably? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_06",
+      "category": "Counterfactual Reasoning",
+      "input": "If water boiled at 50C instead of 100C, would 60C water be liquid or gas?",
+      "evaluation_criteria": {
+        "required_any": [
+          "gas",
+          "vapor",
+          "steam"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_07",
+      "category": "Counterfactual Reasoning",
+      "input": "If all primary keys in a database could be duplicated, would row lookup by key be unique? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_08",
+      "category": "Counterfactual Reasoning",
+      "input": "If a hash function returned the same output for every input, would it be secure? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_09",
+      "category": "Counterfactual Reasoning",
+      "input": "If the sun disappeared, would Earth stay in its circular orbit? Answer Yes or No.",
+      "evaluation_criteria": {
+        "required_any": [
+          "no"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "CFR_10",
+      "category": "Counterfactual Reasoning",
+      "input": "If a function had no base case in recursion, what would happen?",
+      "evaluation_criteria": {
+        "required_any": [
+          "infinite",
+          "stack overflow",
+          "recursion",
+          "crash"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_01",
+      "category": "Algorithm Design",
+      "input": "What is the time complexity of binary search on a sorted array of n items?",
+      "evaluation_criteria": {
+        "required_any": [
+          "log n",
+          "o(log n)",
+          "logarithmic"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_02",
+      "category": "Algorithm Design",
+      "input": "Which data structure uses LIFO (Last In, First Out)?",
+      "evaluation_criteria": {
+        "required_any": [
+          "stack"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_03",
+      "category": "Algorithm Design",
+      "input": "Which data structure uses FIFO (First In, First Out)?",
+      "evaluation_criteria": {
+        "required_any": [
+          "queue"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_04",
+      "category": "Algorithm Design",
+      "input": "How do you find the maximum value in an unsorted array of n numbers?",
+      "evaluation_criteria": {
+        "required_any": [
+          "loop",
+          "iterate",
+          "scan",
+          "compare",
+          "max"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_05",
+      "category": "Algorithm Design",
+      "input": "What data structure gives O(1) average lookup by key?",
+      "evaluation_criteria": {
+        "required_any": [
+          "hash",
+          "dict",
+          "map"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_06",
+      "category": "Algorithm Design",
+      "input": "To detect a cycle in a directed graph, which traversal is commonly used?",
+      "evaluation_criteria": {
+        "required_any": [
+          "dfs",
+          "depth",
+          "topological"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_07",
+      "category": "Algorithm Design",
+      "input": "What is the worst-case time complexity of linear search on n items?",
+      "evaluation_criteria": {
+        "required_any": [
+          "o(n)",
+          "linear"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_08",
+      "category": "Algorithm Design",
+      "input": "To find the shortest path in an unweighted graph, use BFS or DFS?",
+      "evaluation_criteria": {
+        "required_any": [
+          "bfs",
+          "breadth"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_09",
+      "category": "Algorithm Design",
+      "input": "To remove duplicates from a list in Python preserving uniqueness, which built-in type helps?",
+      "evaluation_criteria": {
+        "required_any": [
+          "set"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "ALG_10",
+      "category": "Algorithm Design",
+      "input": "What is the base case for computing factorial(n) recursively?",
+      "evaluation_criteria": {
+        "required_any": [
+          "0",
+          "1"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": true
+    },
+    {
+      "id": "GEN_01",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "A snail climbs 3m up a 10m wall each day and slips 2m each night. On which day does it reach the top?",
+      "evaluation_criteria": {
+        "required_any": [
+          "8"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_02",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "There are 5 machines taking 5 minutes to make 5 widgets. How many minutes for 100 machines to make 100 widgets?",
+      "evaluation_criteria": {
+        "required_any": [
+          "5"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_03",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "A bat and ball cost 1.10 total. The bat costs 1.00 more than the ball. How much does the ball cost?",
+      "evaluation_criteria": {
+        "required_any": [
+          "0.05",
+          "5 cents"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_04",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "If it takes 3 minutes to boil 1 egg, how many minutes to boil 3 eggs together in one pot?",
+      "evaluation_criteria": {
+        "required_any": [
+          "3"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_05",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "You overtake the person in 2nd place in a race. What place are you in now?",
+      "evaluation_criteria": {
+        "required_any": [
+          "2",
+          "second"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_06",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "A farmer has 17 sheep and all but 9 run away. How many are left?",
+      "evaluation_criteria": {
+        "required_any": [
+          "9"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_07",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "How many months in a year have 28 days?",
+      "evaluation_criteria": {
+        "required_any": [
+          "12",
+          "all"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_08",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "A lily pad doubles in size each day. It covers the pond on day 30. On what day was it half full?",
+      "evaluation_criteria": {
+        "required_any": [
+          "29"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_09",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "If a clock shows 3:15, is the hour hand pointing exactly at 3 or slightly past 3?",
+      "evaluation_criteria": {
+        "required_any": [
+          "past",
+          "after"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "GEN_10",
+      "category": "Generalization to Unfamiliar Problems",
+      "input": "If you have 1 match and enter a dark room with a candle, lamp, and stove, what do you light first?",
+      "evaluation_criteria": {
+        "required_any": [
+          "match"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_01",
+      "category": "Multilingual Reasoning",
+      "input": "Translate to English: Bonjour, comment allez-vous?",
+      "evaluation_criteria": {
+        "required_any": [
+          "hello",
+          "how are you"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_02",
+      "category": "Multilingual Reasoning",
+      "input": "En espanol: Si tienes 5 manzanas y das 2, cuantas quedan?",
+      "evaluation_criteria": {
+        "required_any": [
+          "3",
+          "tres"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_03",
+      "category": "Multilingual Reasoning",
+      "input": "Auf Deutsch: Was ist 10 + 15?",
+      "evaluation_criteria": {
+        "required_any": [
+          "25"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_04",
+      "category": "Multilingual Reasoning",
+      "input": "En francais: Quelle est la capitale de la France?",
+      "evaluation_criteria": {
+        "required_any": [
+          "paris"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_05",
+      "category": "Multilingual Reasoning",
+      "input": "In Italian: Grazie means what in English?",
+      "evaluation_criteria": {
+        "required_any": [
+          "thank"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_06",
+      "category": "Multilingual Reasoning",
+      "input": "En espanol: Cual es el color del cielo despejado?",
+      "evaluation_criteria": {
+        "required_any": [
+          "azul",
+          "blue"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_07",
+      "category": "Multilingual Reasoning",
+      "input": "Auf Deutsch: Ist Wasser bei 0 Grad Celsius gefroren? Antwort Ja oder Nein.",
+      "evaluation_criteria": {
+        "required_any": [
+          "ja",
+          "yes"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_08",
+      "category": "Multilingual Reasoning",
+      "input": "En francais: Combien de jours y a-t-il dans une semaine?",
+      "evaluation_criteria": {
+        "required_any": [
+          "7",
+          "sept"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_09",
+      "category": "Multilingual Reasoning",
+      "input": "In Portuguese: Obrigado means what in English?",
+      "evaluation_criteria": {
+        "required_any": [
+          "thank"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    },
+    {
+      "id": "MLR_10",
+      "category": "Multilingual Reasoning",
+      "input": "Translate to English: Buenos dias",
+      "evaluation_criteria": {
+        "required_any": [
+          "good morning"
+        ],
+        "required_all": [],
+        "forbidden": []
+      },
+      "human_review_required": false
+    }
+  ]
+}

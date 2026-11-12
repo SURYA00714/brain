@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-11-12T23:13:55",
+  "models": {
+    "qwen3.5:2b-q4_K_M": {
+      "model_id": "qwen3.5:2b-q4_K_M",
+      "cold_start_latency_ms": 5953.5,
+      "avg_warm_latency_ms": 1992.6,
+      "avg_ttft_ms": 625.7,
+      "avg_tokens_per_sec": 11.8,
+      "baseline_ram_mb": 4729.6,
+      "peak_ram_mb": 5399.2,
+      "ram_delta_mb": 669.7,
+      "cpu_utilization_pct": 10.8,
+      "avg_verification_overhead_ms": 1.7,
+      "hardware": "AMD Ryzen 3 7320U (4C/8T) | 8 GB RAM | AMD Radeon 610M"
+    },
+    "qwen3.5-brain:v2": {
+      "model_id": "qwen3.5-brain:v2",
+      "cold_start_latency_ms": 4381.0,
+      "avg_warm_latency_ms": 788.7,
+      "avg_ttft_ms": 619.1,
+      "avg_tokens_per_sec": 12.6,
+      "baseline_ram_mb": 3123.2,
+      "peak_ram_mb": 4584.8,
+      "ram_delta_mb": 1461.6,
+      "cpu_utilization_pct": 24.0,
+      "avg_verification_overhead_ms": 1.7,
+      "hardware": "AMD Ryzen 3 7320U (4C/8T) | 8 GB RAM | AMD Radeon 610M"
+    }
+  }
+}

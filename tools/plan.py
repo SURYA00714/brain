@@ -36,12 +36,15 @@ class GoalState:
 
 class ExecutionStep:
     """
-    Represents a single executable step within an ExecutionPlan (Phase 18).
+    Represents a single executable step within an ExecutionPlan (Phase 1.5 Controlled Autonomy).
     Supports explicit step identification, dependency graphs, expected outcomes,
-    and verification methods.
+    verification methods, execution states, and full evidence tracking.
     """
+    VALID_STATUSES = {"PENDING", "RUNNING", "SUCCESS", "FAILED", "BLOCKED", "RETRYING", "SKIPPED", "CANCELLED", "COMPLETED", "EXECUTING"}
+
     def __init__(self, action_type="tool", tool_name="", arguments=None, answer=None, description="",
-                 step_id=0, depends_on=None, expected_outcome=None, verification_method="none", allow_failure=False):
+                 step_id=0, depends_on=None, expected_outcome=None, verification_method="none", allow_failure=False,
+                 requires_confirmation=False):
         self.step_id = int(step_id)
         self.action_type = str(action_type).lower()  # "tool", "final", "capability"
         self.tool_name = str(tool_name).upper() if tool_name else ""
@@ -52,16 +55,65 @@ class ExecutionStep:
         self.expected_outcome = str(expected_outcome) if expected_outcome else None
         self.verification_method = str(verification_method).lower() if verification_method else "none"
         self.allow_failure = bool(allow_failure)
-        self.status = "PENDING"  # PENDING, EXECUTING, COMPLETED, FAILED, SKIPPED
+        self.requires_confirmation = bool(requires_confirmation)
+        self.status = "PENDING"  # PENDING, RUNNING, SUCCESS, FAILED, BLOCKED, SKIPPED
         self.result = None
         self.error = None
         self.timestamp = None
+        self.duration_ms = 0.0
+        self.verification_status = "UNVERIFIED"  # UNVERIFIED, VERIFIED, FAILED
+        self.retry_count = 0
+        self.evidence = {
+            "requested_action": self.description or self.tool_name or self.action_type,
+            "actual_tool": self.tool_name,
+            "input_parameters": self.arguments,
+            "result": None,
+            "error": None,
+            "duration_ms": 0.0,
+            "verification_status": "UNVERIFIED",
+            "timestamp": None
+        }
+
+    def set_status(self, new_status: str):
+        st = str(new_status).upper()
+        if st == "COMPLETED":
+            st = "SUCCESS"
+        elif st == "EXECUTING":
+            st = "RUNNING"
+        self.status = st
+
+    @property
+    def is_successful(self) -> bool:
+        return self.status in ("SUCCESS", "COMPLETED")
+
+    def record_execution(self, result: Any, success: bool, duration_ms: float = 0.0,
+                         verification_status: str = "UNVERIFIED", error: Optional[str] = None):
+        self.result = result
+        self.timestamp = time.time()
+        self.duration_ms = duration_ms
+        self.verification_status = verification_status
+        self.error = error or (result.get("error") if isinstance(result, dict) else None)
+        self.set_status("SUCCESS" if success else "FAILED")
+
+        self.evidence = {
+            "requested_action": self.description or self.tool_name or self.action_type,
+            "actual_tool": self.tool_name,
+            "input_parameters": self.arguments,
+            "result": result,
+            "error": self.error,
+            "duration_ms": round(duration_ms, 2),
+            "verification_status": verification_status,
+            "timestamp": self.timestamp
+        }
 
     def to_dict(self):
         d = {
             "step_id": self.step_id,
             "action_type": self.action_type,
-            "status": self.status
+            "status": self.status,
+            "verification_status": self.verification_status,
+            "duration_ms": round(self.duration_ms, 2),
+            "retry_count": self.retry_count
         }
         if self.tool_name:
             d["tool"] = self.tool_name
@@ -79,10 +131,14 @@ class ExecutionStep:
             d["verification_method"] = self.verification_method
         if self.allow_failure:
             d["allow_failure"] = self.allow_failure
+        if self.requires_confirmation:
+            d["requires_confirmation"] = self.requires_confirmation
         if self.result is not None:
             d["result"] = self.result
         if self.error:
             d["error"] = self.error
+        if self.evidence:
+            d["evidence"] = self.evidence
         return d
 
     @classmethod
@@ -99,7 +155,8 @@ class ExecutionStep:
         exp = data.get("expected_outcome")
         ver = data.get("verification_method", "none")
         allow_fail = data.get("allow_failure", False)
-        return cls(
+        req_confirm = data.get("requires_confirmation", False)
+        step = cls(
             action_type=atype,
             tool_name=tool,
             arguments=args,
@@ -109,8 +166,12 @@ class ExecutionStep:
             depends_on=deps,
             expected_outcome=exp,
             verification_method=ver,
-            allow_failure=allow_fail
+            allow_failure=allow_fail,
+            requires_confirmation=req_confirm
         )
+        if "status" in data:
+            step.set_status(data["status"])
+        return step
 
 
 class ExecutionPlan:
@@ -124,9 +185,10 @@ class ExecutionPlan:
         self.current_step_idx = 0
         self.recovery_count = 0
         self.max_recovery_attempts = 2
-        self.status = "PENDING"  # PENDING, RUNNING, COMPLETED, FAILED, BLOCKED
+        self.status = "PENDING"  # PENDING, RUNNING, SUCCESS, FAILED, BLOCKED, COMPLETED
         self.created_at = time.time()
         self.goal_state = GoalState(objective=self.goal, status="PENDING")
+        self.history = []
 
     def add_step(self, step):
         if isinstance(step, ExecutionStep):
@@ -138,45 +200,77 @@ class ExecutionPlan:
         self._sync_goal_state()
 
     def _sync_goal_state(self):
-        remaining = [s.tool_name or s.action_type for s in self.steps if s.status not in ("COMPLETED", "FAILED", "SKIPPED")]
+        remaining = [s.tool_name or s.action_type for s in self.steps if s.status not in ("SUCCESS", "COMPLETED", "FAILED", "SKIPPED")]
         self.goal_state.current_step = self.current_step_idx
         self.goal_state.remaining_steps = remaining
         if not remaining and self.steps:
-            self.goal_state.status = "COMPLETED" if not self.goal_state.failed_steps else "FAILED"
+            all_succeeded = all(s.is_successful for s in self.steps if s.status != "SKIPPED")
+            self.goal_state.status = "COMPLETED" if all_succeeded else "FAILED"
+            self.status = "SUCCESS" if all_succeeded else "FAILED"
 
     def get_current_step(self):
         if 0 <= self.current_step_idx < len(self.steps):
             return self.steps[self.current_step_idx]
         return None
 
+    def get_next_executable_step(self):
+        """Returns the first non-completed step (PENDING or BLOCKED) for task continuity."""
+        for idx, s in enumerate(self.steps):
+            if s.status in ("PENDING", "BLOCKED"):
+                self.current_step_idx = idx
+                return s
+        return None
+
+    def resume(self):
+        """Continues execution after interruption without repeating successful steps."""
+        next_step = self.get_next_executable_step()
+        if next_step:
+            self.status = "RUNNING"
+            return next_step
+        if all(s.is_successful for s in self.steps):
+            self.status = "SUCCESS"
+        return None
+
     def advance(self):
         if self.current_step_idx < len(self.steps):
             self.current_step_idx += 1
         if self.current_step_idx >= len(self.steps):
-            self.status = "COMPLETED"
+            all_succeeded = all(s.is_successful for s in self.steps if s.status != "SKIPPED")
+            self.status = "SUCCESS" if all_succeeded else "FAILED"
 
     def is_complete(self):
-        return self.status == "COMPLETED" or (self.current_step_idx >= len(self.steps) and len(self.steps) > 0)
+        return self.status in ("SUCCESS", "COMPLETED") or (self.current_step_idx >= len(self.steps) and len(self.steps) > 0)
 
     def is_failed(self):
         return self.status == "FAILED"
 
-    def record_result(self, step_idx, result, success=True):
+    def record_result(self, step_idx, result, success=True, duration_ms=0.0, verification_status="UNVERIFIED", error=None):
         if 0 <= step_idx < len(self.steps):
             step = self.steps[step_idx]
-            step.result = result
-            step.timestamp = time.time()
+            step.record_execution(
+                result=result,
+                success=success,
+                duration_ms=duration_ms,
+                verification_status=verification_status,
+                error=error
+            )
             step_name = step.tool_name or step.action_type
             if success:
-                step.status = "COMPLETED"
-                step.error = None
                 if step_name not in self.goal_state.completed_steps:
                     self.goal_state.completed_steps.append(step_name)
             else:
-                step.status = "FAILED"
-                step.error = result.get("error") if isinstance(result, dict) else str(result)
                 if step_name not in self.goal_state.failed_steps:
                     self.goal_state.failed_steps.append(step_name)
+
+            self.history.append({
+                "step_id": step.step_id,
+                "tool": step.tool_name,
+                "status": step.status,
+                "verification_status": verification_status,
+                "duration_ms": duration_ms,
+                "error": step.error,
+                "timestamp": step.timestamp
+            })
             self._sync_goal_state()
 
     def validate(self, registry=None):
@@ -206,7 +300,8 @@ class ExecutionPlan:
             "current_step_idx": self.current_step_idx,
             "total_steps": len(self.steps),
             "recovery_count": self.recovery_count,
-            "steps": [s.to_dict() for s in self.steps]
+            "steps": [s.to_dict() for s in self.steps],
+            "history": self.history
         }
 
     @classmethod

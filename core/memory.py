@@ -9,7 +9,21 @@ from typing import List, Dict, Any, Optional, Tuple
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "brain_memory.db"
 
 VALID_MEMORY_TYPES = {
-    "FACT", "PREFERENCE", "TASK", "EVENT", "DECISION", "EXPERIENCE", "CONTEXT"
+    "FACT", "PREFERENCE", "TASK", "EVENT", "DECISION", "EXPERIENCE", "CONTEXT",
+    "EPISODIC", "PROCEDURAL", "FAILURE"
+}
+
+MEMORY_CATEGORY_MAP = {
+    "FACT": "LONG_TERM",
+    "PREFERENCE": "LONG_TERM",
+    "DECISION": "LONG_TERM",
+    "TASK": "EPISODIC",
+    "EVENT": "EPISODIC",
+    "EXPERIENCE": "EPISODIC",
+    "EPISODIC": "EPISODIC",
+    "PROCEDURAL": "PROCEDURAL",
+    "FAILURE": "FAILURE",
+    "CONTEXT": "SHORT_TERM",
 }
 
 # Patterns for sensitive credentials, secrets, or API keys that must NEVER be persisted
@@ -40,6 +54,16 @@ class MemoryRecord:
     created_at: float = 0.0
     updated_at: float = 0.0
     access_count: int = 0
+    ttl_seconds: Optional[float] = None
+    verified: bool = True
+    relevance_score: float = 0.0
+
+    def is_stale(self, default_max_age: Optional[float] = None) -> bool:
+        """Checks whether this memory has exceeded its TTL or max age."""
+        limit = self.ttl_seconds if self.ttl_seconds is not None else default_max_age
+        if limit is None or self.updated_at <= 0:
+            return False
+        return (time.time() - self.updated_at) > limit
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -51,7 +75,7 @@ class MemoryPolicy:
     Enforces quality checks, length boundaries, and secret filtering before storage.
     """
     @classmethod
-    def evaluate(cls, memory_type: str, subject: str, key: str, value: str) -> Tuple[str, Optional[str], Optional[MemoryRecord]]:
+    def evaluate(cls, memory_type: str, subject: str, key: str, value: str, verified: bool = True) -> Tuple[str, Optional[str], Optional[MemoryRecord]]:
         """
         Evaluates a candidate memory against safety, quality, and privacy rules.
         Returns: (Decision: "REMEMBER" | "TEMPORARY" | "IGNORE", reason, sanitized_record)
@@ -59,6 +83,10 @@ class MemoryPolicy:
         clean_type = str(memory_type).upper().strip()
         if clean_type not in VALID_MEMORY_TYPES:
             return "IGNORE", f"Invalid memory type '{memory_type}'.", None
+
+        # Avoid storing unverified information as permanent long-term facts/preferences
+        if not verified and clean_type in ("FACT", "PREFERENCE", "PROCEDURAL"):
+            return "TEMPORARY", "Unverified information cannot be stored as a permanent fact.", None
 
         clean_sub = str(subject).strip().lower()
         clean_key = str(key).strip().lower()
@@ -90,9 +118,9 @@ class MemoryPolicy:
             if re.search(pattern, combined_text, flags=re.IGNORECASE):
                 return "IGNORE", "Security Policy Violation: Memory contains forbidden command execution syntax.", None
 
-        # Ephemeral / Temporary context detection
+        # Ephemeral / Temporary context detection (applies to facts/preferences/context, not failure/procedural logs)
         temporary_keywords = ["temporary", "just for now", "for now", "for this step", "current query", "for this session", "search "]
-        if any(kw in combined_text.lower() for kw in temporary_keywords):
+        if clean_type in ("FACT", "PREFERENCE", "CONTEXT") and any(kw in combined_text.lower() for kw in temporary_keywords):
             return "TEMPORARY", "Memory marked as temporary context.", None
 
         record = MemoryRecord(
@@ -175,9 +203,17 @@ class MemoryStore:
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     access_count INTEGER NOT NULL DEFAULT 0,
+                    ttl_seconds REAL,
+                    verified INTEGER NOT NULL DEFAULT 1,
                     UNIQUE(memory_type, subject, key)
                 )
             """)
+            # Safe schema migration for existing DBs
+            cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(memories)").fetchall()}
+            if "ttl_seconds" not in cols:
+                self._conn.execute("ALTER TABLE memories ADD COLUMN ttl_seconds REAL")
+            if "verified" not in cols:
+                self._conn.execute("ALTER TABLE memories ADD COLUMN verified INTEGER NOT NULL DEFAULT 1")
             self._conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_memories_type_sub ON memories (memory_type, subject);
             """)
@@ -196,6 +232,36 @@ class MemoryStore:
                 CREATE INDEX IF NOT EXISTS idx_task_events_time ON task_events (timestamp DESC);
             """)
 
+    def detect_conflicting_memories(self, subject: str, key: str, value: str) -> List[MemoryRecord]:
+        """Detects existing memories for the same subject and key with a different value."""
+        sub = str(subject).strip().lower()
+        k = str(key).strip().lower()
+        val = str(value).strip()
+        cursor = self._conn.execute("""
+            SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count, ttl_seconds, verified
+            FROM memories
+            WHERE subject = ? AND key = ? AND LOWER(TRIM(value)) != LOWER(TRIM(?))
+        """, (sub, k, val))
+        return [self._row_to_record(r) for r in cursor.fetchall()]
+
+    def _row_to_record(self, row: sqlite3.Row, relevance_score: float = 0.0) -> MemoryRecord:
+        keys = row.keys()
+        return MemoryRecord(
+            id=row["id"],
+            memory_type=row["memory_type"],
+            subject=row["subject"],
+            key=row["key"],
+            value=row["value"],
+            confidence=row["confidence"],
+            source=row["source"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            access_count=row["access_count"],
+            ttl_seconds=row["ttl_seconds"] if "ttl_seconds" in keys else None,
+            verified=bool(row["verified"]) if "verified" in keys else True,
+            relevance_score=relevance_score,
+        )
+
     def add_memory(
         self,
         memory_type: str,
@@ -203,27 +269,38 @@ class MemoryStore:
         key: str,
         value: str,
         confidence: float = 1.0,
-        source: str = "user"
+        source: str = "user",
+        ttl_seconds: Optional[float] = None,
+        verified: bool = True,
+        allow_overwrite: bool = True
     ) -> Tuple[bool, Optional[str]]:
         """
         Validates through MemoryPolicy and stores/updates a persistent memory.
+        Detects conflicting memories and prevents duplicate or unverified permanent facts.
         Returns (success: bool, error_or_reason: Optional[str]).
         """
-        decision, reason, record = MemoryPolicy.evaluate(memory_type, subject, key, value)
+        decision, reason, record = MemoryPolicy.evaluate(memory_type, subject, key, value, verified=verified)
         if decision != "REMEMBER" or record is None:
             return False, reason or "Memory rejected by policy."
+
+        conflicts = self.detect_conflicting_memories(record.subject, record.key, record.value)
+        if conflicts and not allow_overwrite:
+            existing_vals = ", ".join(c.value for c in conflicts)
+            return False, f"Conflicting memory detected for {record.subject}.{record.key}: existing='{existing_vals}', new='{record.value}'"
 
         now = time.time()
         try:
             with self._conn:
                 self._conn.execute("""
-                    INSERT INTO memories (memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    INSERT INTO memories (memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count, ttl_seconds, verified)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                     ON CONFLICT(memory_type, subject, key) DO UPDATE SET
                         value = excluded.value,
                         confidence = excluded.confidence,
                         source = excluded.source,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        ttl_seconds = excluded.ttl_seconds,
+                        verified = excluded.verified
                 """, (
                     record.memory_type,
                     record.subject,
@@ -232,16 +309,63 @@ class MemoryStore:
                     confidence,
                     source,
                     now,
-                    now
+                    now,
+                    ttl_seconds,
+                    1 if verified else 0,
                 ))
+            if conflicts:
+                self.record_event(
+                    "MEMORY_CONFLICT_RESOLVED",
+                    f"Updated {record.subject}.{record.key} from '{conflicts[0].value}' to '{record.value}'",
+                    status="SUCCESS",
+                    metadata={"source": source}
+                )
             return True, None
         except Exception as e:
             return False, f"Database write error: {str(e)}"
 
+    def correct_memory(
+        self,
+        memory_type: str,
+        subject: str,
+        key: str,
+        new_value: str,
+        source: str = "user_correction"
+    ) -> Tuple[bool, Optional[str]]:
+        """Explicitly applies a user correction to an existing or new memory record."""
+        ok, err = self.add_memory(
+            memory_type=memory_type,
+            subject=subject,
+            key=key,
+            value=new_value,
+            confidence=1.0,
+            source=source,
+            verified=True,
+            allow_overwrite=True,
+        )
+        if ok:
+            self.record_event("USER_CORRECTION", f"Corrected {subject}.{key} = {new_value}", status="SUCCESS")
+        return ok, err
+
+    def record_procedural_workflow(self, goal: str, steps: List[str], verified: bool = True) -> Tuple[bool, Optional[str]]:
+        """Stores a verified successful workflow in PROCEDURAL memory."""
+        if not verified or not steps:
+            return False, "Only verified non-empty workflows can be stored in procedural memory."
+        key = re.sub(r"[^a-z0-9_]+", "_", goal.lower().strip())[:64].strip("_") or "workflow"
+        val = " -> ".join(steps)[:MAX_MEMORY_VALUE_LENGTH]
+        return self.add_memory("PROCEDURAL", "workflow", key, val, confidence=1.0, source="execution", verified=True)
+
+    def record_failure_memory(self, error_pattern: str, corrective_action: str, tool_name: str = "") -> Tuple[bool, Optional[str]]:
+        """Stores a failure pattern and its corrective action in FAILURE memory."""
+        sub = (tool_name or "system").lower().strip()
+        key = re.sub(r"[^a-z0-9_]+", "_", error_pattern.lower().strip())[:64].strip("_") or "error"
+        val = f"Error: {error_pattern[:150]} | Fix: {corrective_action[:250]}"[:MAX_MEMORY_VALUE_LENGTH]
+        return self.add_memory("FAILURE", sub, key, val, confidence=1.0, source="recovery", verified=True)
+
     def get_memory(self, memory_type: str, subject: str, key: str) -> Optional[MemoryRecord]:
         """Retrieves a single exact memory match by type, subject, and key."""
         cursor = self._conn.execute("""
-            SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count
+            SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count, ttl_seconds, verified
             FROM memories
             WHERE memory_type = ? AND subject = ? AND key = ?
         """, (str(memory_type).upper(), str(subject).lower(), str(key).lower()))
@@ -253,34 +377,26 @@ class MemoryStore:
         with self._conn:
             self._conn.execute("UPDATE memories SET access_count = access_count + 1 WHERE id = ?", (row["id"],))
 
-        return MemoryRecord(
-            id=row["id"],
-            memory_type=row["memory_type"],
-            subject=row["subject"],
-            key=row["key"],
-            value=row["value"],
-            confidence=row["confidence"],
-            source=row["source"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-            access_count=row["access_count"] + 1
-        )
+        rec = self._row_to_record(row)
+        rec.access_count += 1
+        return rec
 
     def search_memories(
         self,
         query: str,
         limit: int = 5,
-        memory_type: Optional[str] = None
+        memory_type: Optional[str] = None,
+        exclude_stale: bool = True,
+        min_relevance: float = 0.15
     ) -> List[MemoryRecord]:
         """
-        Lightweight metadata & keyword retrieval for relevant memories.
-        Ranks by keyword match, confidence, and recency without bloated vector DBs.
+        Relevance-ranked metadata & keyword retrieval for memories.
+        Scores by keyword match ratio, confidence, and freshness; avoids injecting irrelevant or stale memories.
         """
         clean_q = str(query).strip().lower()
         if not clean_q:
             return []
 
-        # Extract search keywords with stopword filtering and sub-tokenization
         STOPWORDS = {
             "can", "you", "find", "something", "using", "with", "about", "what", "which", "where",
             "when", "how", "the", "and", "for", "that", "this", "from", "have", "please", "tell",
@@ -296,12 +412,12 @@ class MemoryStore:
                         expanded.append(sub)
 
         meaningful = [w for w in expanded if w not in STOPWORDS]
-        keywords = (meaningful if meaningful else expanded)[:10]
+        keywords = list(dict.fromkeys(meaningful if meaningful else expanded))[:10]
         if not keywords:
             keywords = [clean_q]
 
         like_clauses = " OR ".join(["key LIKE ? OR value LIKE ? OR subject LIKE ?"] * len(keywords))
-        params = []
+        params: List[Any] = []
         for kw in keywords:
             pat = f"%{kw}%"
             params.extend([pat, pat, pat])
@@ -312,32 +428,36 @@ class MemoryStore:
             params.append(str(memory_type).upper())
 
         sql = f"""
-            SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count
+            SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count, ttl_seconds, verified
             FROM memories
             WHERE ({like_clauses}) {type_clause}
             ORDER BY confidence DESC, updated_at DESC
             LIMIT ?
         """
-        params.append(limit)
+        params.append(max(limit * 4, 20))
 
         try:
             cursor = self._conn.execute(sql, params)
             rows = cursor.fetchall()
-            results = []
+            scored: List[MemoryRecord] = []
+            now = time.time()
             for row in rows:
-                results.append(MemoryRecord(
-                    id=row["id"],
-                    memory_type=row["memory_type"],
-                    subject=row["subject"],
-                    key=row["key"],
-                    value=row["value"],
-                    confidence=row["confidence"],
-                    source=row["source"],
-                    created_at=row["created_at"],
-                    updated_at=row["updated_at"],
-                    access_count=row["access_count"]
-                ))
-            return results
+                rec = self._row_to_record(row)
+                if exclude_stale and rec.is_stale():
+                    continue
+                blob = f"{rec.subject} {rec.key} {rec.value}".lower()
+                hits = sum(1 for kw in keywords if kw in blob)
+                kw_ratio = hits / len(keywords)
+                age_days = max(0.0, (now - rec.updated_at) / 86400.0) if rec.updated_at else 0.0
+                freshness = 1.0 / (1.0 + 0.05 * age_days)
+                relevance = round(0.60 * kw_ratio + 0.25 * rec.confidence + 0.15 * freshness, 4)
+                if hits == 0 or relevance < min_relevance:
+                    continue
+                rec.relevance_score = relevance
+                scored.append(rec)
+
+            scored.sort(key=lambda r: (r.relevance_score, r.updated_at), reverse=True)
+            return scored[:limit]
         except Exception:
             return []
 

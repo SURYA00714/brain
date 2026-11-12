@@ -20,6 +20,7 @@ from core.identity import default_identity
 from core.memory import default_memory
 from core.world_state import default_world_state
 from core.context import default_context_builder
+from core.cognition import default_cognition, verify_step_execution, validate_step_permissions, validate_step_parameters
 
 
 URL = "http://localhost:11434/api/generate"
@@ -412,9 +413,10 @@ class TaskState:
         }
 
 
-def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=False, debug=False):
+def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=False, debug=False, user_confirmed=False):
     """
-    Executes a multi-step ExecutionPlan sequentially with state verification and bounded recovery.
+    Executes a multi-step ExecutionPlan sequentially with controlled autonomy,
+    multi-signal evidence verification, bounded recovery, and task continuity.
     Does NOT invoke the LLM for every step.
     Returns final response string.
     """
@@ -433,12 +435,17 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
         step_idx += 1
         plan.current_step_idx = step_idx - 1
 
+        # Task continuity: Skip steps already marked SUCCESS or SKIPPED
+        if step.is_successful or step.status == "SKIPPED":
+            continue
+
         action_type = step.action_type
         tool_name = step.tool_name
         args = step.arguments
 
         if action_type == "final":
-            plan.status = "COMPLETED"
+            step.set_status("SUCCESS")
+            plan.status = "SUCCESS"
             ans = step.answer or "Task completed successfully."
             current_obs = default_vision.get_current_observation()
             if current_obs and current_obs.get("elements") and "screen" in user_request.lower():
@@ -451,103 +458,113 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
             return ans
 
         if action_type in ("tool", "capability"):
-            # 1. Terminal & Action-Chain Safety Gate
+            # 1. Dependency Prerequisite Validation
+            if step.depends_on:
+                missing_deps = []
+                for dep_id in step.depends_on:
+                    dep_step = next((s for s in plan.steps if s.step_id == dep_id), None)
+                    if not dep_step or not dep_step.is_successful:
+                        missing_deps.append(dep_id)
+                if missing_deps:
+                    if step.allow_failure:
+                        step.set_status("SKIPPED")
+                        continue
+                    else:
+                        step.set_status("BLOCKED")
+                        plan.status = "FAILED"
+                        err_msg = f"Step {step.step_id} blocked: Prerequisite step(s) {missing_deps} have not succeeded."
+                        step.error = err_msg
+                        return f"Brain Error: {err_msg}"
+
+            # 2. Tool Registry Existence Gate
+            if not registry.has_tool(tool_name):
+                err_msg = f"Tool '{tool_name}' is not registered."
+                step.record_execution({"success": False, "error": err_msg}, success=False, verification_status="FAILED")
+                plan.status = "FAILED"
+                return f"Brain Error: {err_msg}"
+
+            # 3. Parameter Validation Gate
+            is_valid_param, param_err = validate_step_parameters(step, registry)
+            if not is_valid_param:
+                step.record_execution({"success": False, "error": param_err}, success=False, verification_status="FAILED")
+                plan.status = "FAILED"
+                return f"Brain Error: {param_err}"
+
+            # 4. Terminal & Action-Chain Safety Gate
             is_safe, safety_err = validate_gui_action_safety(tool_name, args)
             if not is_safe:
+                step.record_execution({"success": False, "error": safety_err}, success=False, verification_status="FAILED")
                 plan.status = "FAILED"
-                step.status = "FAILED"
-                step.error = safety_err
                 return f"Brain Error: {safety_err}"
+
+            # 5. Permission & Confirmation Gate
+            is_allowed, perm_reason = validate_step_permissions(step, user_confirmed=user_confirmed)
+            if not is_allowed:
+                step.set_status("BLOCKED")
+                step.error = perm_reason
+                plan.status = "BLOCKED"
+                return f"Brain Notice: {perm_reason}"
+
+            if user_confirmed:
+                args["confirmed"] = True
+
+            # Set step state to RUNNING
+            step.set_status("RUNNING")
 
             if not quiet:
                 print(f"Brain: [Step {step_idx}/{len(plan.steps)}] Executing {tool_name} with args {args}...")
 
+            # 6. Tool Execution with Duration Tracking
             t0 = time.time()
-            if not registry.has_tool(tool_name):
-                result = {"success": False, "error": f"Tool '{tool_name}' is not registered."}
-            else:
-                result = registry.execute(tool_name, args)
+            result = registry.execute(tool_name, args)
             t1 = time.time()
+            dur_ms = (t1 - t0) * 1000.0
             profiler.record_tool(tool_name, t1 - t0, is_gui=(tool_name in ui_modifying_tools))
 
-            # Phase 18: Post-Action Multi-Signal Physical State Verification
-            if result.get("success"):
-                if tool_name == "OPEN_APP":
-                    app_to_check = args.get("name") or args.get("app_name") or ""
-                    from tools.apps import verify_app_open
-                    from core.telemetry import default_telemetry
-                    default_world_state.sync_from_system()
-                    ver_res = verify_app_open(app_to_check, timeout=1.5)
-                    if not ver_res.get("verified"):
-                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' not detected in system state."}
-                        default_telemetry.current.false_verification = True
-                    else:
-                        default_world_state.last_opened_app = app_to_check
-                        default_telemetry.current.verification_method = ver_res.get("method", "multi_signal")
-                elif tool_name == "CLOSE_APP":
-                    app_to_check = args.get("app_name", "")
-                    from tools.apps import default_app_tracker
-                    default_world_state.sync_from_system()
-                    if os.environ.get("BRAIN_MOCK_GUI") != "1" and default_app_tracker.is_running(app_to_check):
-                        result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
+            # 7. Evidence-Based Verification
+            is_verified, ver_status, ver_reason = verify_step_execution(tool_name, args, result)
+            if not is_verified:
+                result["success"] = False
+                result["error"] = ver_reason
 
-            default_world_state.record_action_outcome(tool_name, args, result, verified=result.get("success", False))
+            default_world_state.record_action_outcome(tool_name, args, result, verified=is_verified)
+            plan.record_result(step_idx - 1, result, success=is_verified, duration_ms=dur_ms, verification_status=ver_status)
+            task_state.update_result(result, verification_status=ver_status)
 
-            if result.get("success"):
-                plan.record_result(step_idx - 1, result, success=True)
-                task_state.update_result(result, verification_status="VERIFIED")
+            if is_verified:
                 last_tool_res = result
-
                 if tool_name in ui_modifying_tools:
                     analyze_captured_screen(force_refresh=True)
             else:
-                plan.record_result(step_idx - 1, result, success=False)
-                task_state.update_result(result, verification_status="FAILED")
+                # 8. Adaptive Cognitive Recovery & Retry Loop
+                eval_decision = default_cognition.evaluate_step_result(step, result, plan.goal_state)
+                decision = eval_decision.get("decision", "STOP")
 
-                # Immediate halt if physical state verification explicitly failed
-                if "Verification failed:" in str(result.get("error")):
-                    plan.status = "FAILED"
-                    default_world_state.set_active_task(None)
-                    default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
-                    return f"Brain Error: Action '{tool_name}' failed ({result.get('error')}). Plan halted."
-
-                # Adaptive State-Based Bounded Recovery Check (Max 2 attempts)
-                from core.recovery import default_recovery_manager
-                diag_code, diag_expl = default_recovery_manager.diagnose_failure(tool_name, args, result)
-
-                if plan.recovery_count < plan.max_recovery_attempts:
-                    strat = default_recovery_manager.determine_recovery_strategy(tool_name, args, diag_code, plan.recovery_count)
-                    if strat.get("action") == "HALT":
-                        plan.status = "FAILED"
-                        default_world_state.set_active_task(None)
-                        default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
-                        return f"Brain Error: Action '{tool_name}' failed. {diag_expl} ({strat.get('message')})"
-
-                    plan.recovery_count += 1
-                    if not quiet:
-                        print(f"Brain: Step '{tool_name}' failed ({result.get('error')}). Initiating recovery (Attempt {plan.recovery_count}/{plan.max_recovery_attempts}): {strat.get('message')}")
-
-                    # Attempt state recovery based on diagnostic strategy
-                    if strat.get("action") == "REFOCUS":
-                        target_app = strat.get("target_app") or default_app_tracker.get_focused_app() or "brave"
-                        focus_app(target_app)
-                    elif strat.get("action") == "REFRESH_PERCEPTION":
-                        analyze_captured_screen(force_refresh=True)
-
-                    # Retry step once
-                    retry_res = registry.execute(tool_name, args)
-                    default_world_state.record_action_outcome(tool_name, args, retry_res, verified=retry_res.get("success", False))
-                    if retry_res.get("success"):
-                        plan.record_result(step_idx - 1, retry_res, success=True)
-                        last_tool_res = retry_res
+                if decision == "RETRY":
+                    step.retry_count += 1
+                    if step.retry_count <= 2:
+                        if not quiet:
+                            print(f"Brain: Notice - Step '{tool_name}' failed verification ({result.get('error')}). Retrying attempt {step.retry_count}/2...")
+                        step_idx -= 1  # Decrement to re-execute step
                         continue
 
+                if decision == "REPLAN":
+                    rec_tool = eval_decision.get("recommended_tool")
+                    if rec_tool and registry.has_tool(rec_tool) and plan.recovery_count < plan.max_recovery_attempts:
+                        plan.recovery_count += 1
+                        if not quiet:
+                            print(f"Brain: Re-planning step {step.step_id} with alternate tool '{rec_tool}'...")
+                        step.tool_name = rec_tool
+                        step_idx -= 1
+                        continue
+
+                # Unrecoverable failure: halt safely
                 plan.status = "FAILED"
                 default_world_state.set_active_task(None)
                 default_memory.record_event("PLAN", f"Goal: {user_request}", status="FAILED")
-                return f"Brain Error: Action '{tool_name}' failed ({result.get('error')}). Plan halted."
+                return f"Brain Error: Action '{tool_name}' failed verification ({result.get('error')}). Plan halted."
 
-    plan.status = "COMPLETED"
+    plan.status = "SUCCESS"
     default_world_state.set_active_task(None)
     default_memory.record_event("PLAN", f"Goal: {user_request}", status="COMPLETED")
 
@@ -939,8 +956,8 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             default_telemetry.finish_request()
             return clarification
 
-        # 4. Autonomous Compound Goal Execution
-        if intent_name == "COMPOUND_GOAL":
+        # 4. Autonomous Compound / Task Goal Execution
+        if intent_name in ("COMPOUND_GOAL", "TASK_GOAL"):
             auto_plan = default_cognition.plan_autonomous_goal(effective_request)
             if auto_plan:
                 profiler.record_route("COGNITIVE_ENGINE", "AUTONOMOUS_GOAL")
@@ -949,8 +966,17 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                 profiler.record_total()
                 profiler.log_summary(user_request, mode="AUTO", status="SUCCESS" if auto_plan.status == "COMPLETED" else "FAILED")
                 telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
-                telemetry.llm_calls_this_request = 0
-                telemetry.provenance = "WORLD_STATE"
+                resp_plan = getattr(default_cognition, "last_planning_response", None)
+                if resp_plan:
+                    telemetry.llm_calls_this_request = 1
+                    telemetry.provenance = "MODEL"
+                    telemetry.reasoning_required = True
+                    telemetry.llm_provider = resp_plan.provider
+                    telemetry.llm_time_ms = resp_plan.duration_ms
+                    telemetry.fallback_used = resp_plan.fallback_used
+                else:
+                    telemetry.llm_calls_this_request = 0
+                    telemetry.provenance = "WORLD_STATE"
                 telemetry.goal_status = auto_plan.goal_state.status
                 default_telemetry.finish_request()
                 return res

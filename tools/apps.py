@@ -175,10 +175,11 @@ class AppTracker:
         self._currently_focused_app = normalize_app_name(app_name)
 
     def get_focused_app(self):
-        active = get_active_window_app_name()
-        if active:
-            self._currently_focused_app = active
-            return active
+        if os.environ.get("BRAIN_MOCK_GUI") != "1":
+            active = get_active_window_app_name()
+            if active:
+                self._currently_focused_app = active
+                return active
         return self._currently_focused_app
 
     def close_app(self, app_name):
@@ -551,9 +552,12 @@ def get_system_state_summary() -> dict:
                         pass
 
     # Active app & window title
-    active_app = get_active_window_app_name()
-    if not active_app:
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
         active_app = default_app_tracker.get_focused_app()
+    else:
+        active_app = get_active_window_app_name()
+        if not active_app:
+            active_app = default_app_tracker.get_focused_app()
 
     active_title = None
     if os.environ.get("BRAIN_MOCK_GUI") != "1":

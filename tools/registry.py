@@ -14,7 +14,7 @@ from tools.window_manager import (
 )
 from tools.search import perform_web_search
 from tools.files import (
-    list_files, find_files, read_text_file, create_folder,
+    list_files, find_files, read_text_file, write_text_file, create_folder,
     create_file, copy_file, move_file, rename_file, file_info, delete_file
 )
 from tools.screen import capture_screen, analyze_captured_screen, ocr_screen, capture_screen_region
@@ -497,6 +497,14 @@ default_registry.register(Tool(
     parameters={"file_name": "string", "parent_root": "string (default: Downloads)"},
     risk_level="MEDIUM",
     func=create_file
+))
+
+default_registry.register(Tool(
+    name="WRITE_TEXT_FILE",
+    description="Writes text content to a file inside safe directories.",
+    parameters={"filepath": "string", "content": "string"},
+    risk_level="MEDIUM",
+    func=write_text_file
 ))
 
 default_registry.register(Tool(

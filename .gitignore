@@ -5,7 +5,11 @@ logs/*.log
 logs/*.png
 logs/*.jpg
 logs/screenshots/
-models/
+# Model weights and Ollama blob storage (preserve Python modules in models/)
+models/blobs/
+models/manifests/
+models/*.bin
+models/*.gguf
 .DS_Store
 .env
 .env.*
@@ -15,3 +19,4 @@ desktopmate/
 *.log
 3D MODEL/
 cleanup_report.txt
+yui/

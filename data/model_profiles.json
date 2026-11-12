@@ -1,0 +1,190 @@
+{
+  "qwen3.5:2b-q4_K_M": {
+    "model_id": "qwen3.5:2b-q4_K_M",
+    "timestamp": "2026-11-12T22:36:42",
+    "overall_capability_score": 80.0,
+    "capabilities": {
+      "instruction_following": {
+        "dimension": "instruction_following",
+        "status": "MEASURED",
+        "score": 0.0,
+        "passed": false,
+        "details": "Three words.",
+        "latency_ms": 5117.7
+      },
+      "logical_reasoning": {
+        "dimension": "logical_reasoning",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Yes",
+        "latency_ms": 863.5
+      },
+      "mathematical_reasoning": {
+        "dimension": "mathematical_reasoning",
+        "status": "MEASURED",
+        "score": 0.0,
+        "passed": false,
+        "details": "20",
+        "latency_ms": 967.9
+      },
+      "multistep_planning": {
+        "dimension": "multistep_planning",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Step 1: Locate the spare tire, jack, and lug wrench inside your vehicle's trunk ",
+        "latency_ms": 12567.7
+      },
+      "structured_json_generation": {
+        "dimension": "structured_json_generation",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "{\"status\":\"ok\",\"count\":1}",
+        "latency_ms": 1655.0
+      },
+      "tool_call_formatting": {
+        "dimension": "tool_call_formatting",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "{\"tool\":\"get_weather\",\"arguments\":{\"location\":\"Tokyo\"}}",
+        "latency_ms": 2011.1
+      },
+      "context_retention": {
+        "dimension": "context_retention",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "78241",
+        "latency_ms": 1171.5
+      },
+      "ambiguity_handling": {
+        "dimension": "ambiguity_handling",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Yes, the request is ambiguous because it does not specify which file to send or ",
+        "latency_ms": 3030.5
+      },
+      "uncertainty_calibration": {
+        "dimension": "uncertainty_calibration",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "It is currently **not possible** to predict the exact closing price of Apple (AA",
+        "latency_ms": 11141.7
+      },
+      "multilingual_ability": {
+        "dimension": "multilingual_ability",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Bonjour",
+        "latency_ms": 634.2
+      }
+    },
+    "metadata": {
+      "format": "gguf",
+      "family": "qwen35",
+      "parameter_size": "1.9B",
+      "quantization": "Q4_K_M",
+      "file_size_mb": 1855.6
+    }
+  },
+  "qwen3.5-brain:v2": {
+    "model_id": "qwen3.5-brain:v2",
+    "timestamp": "2026-11-12T22:37:35",
+    "overall_capability_score": 80.0,
+    "capabilities": {
+      "instruction_following": {
+        "dimension": "instruction_following",
+        "status": "MEASURED",
+        "score": 0.0,
+        "passed": false,
+        "details": "Never endless.",
+        "latency_ms": 5328.7
+      },
+      "logical_reasoning": {
+        "dimension": "logical_reasoning",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Yes",
+        "latency_ms": 887.7
+      },
+      "mathematical_reasoning": {
+        "dimension": "mathematical_reasoning",
+        "status": "MEASURED",
+        "score": 0.0,
+        "passed": false,
+        "details": "19",
+        "latency_ms": 992.4
+      },
+      "multistep_planning": {
+        "dimension": "multistep_planning",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Step 1: Place the spare tire and lug nuts on the ground beside the vehicle, then",
+        "latency_ms": 9738.8
+      },
+      "structured_json_generation": {
+        "dimension": "structured_json_generation",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "{\"status\":\"ok\",\"count\":1}",
+        "latency_ms": 1626.8
+      },
+      "tool_call_formatting": {
+        "dimension": "tool_call_formatting",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "{\"tool\":\"get_weather\",\"arguments\":{\"location\":\"Tokyo\"}}",
+        "latency_ms": 2053.9
+      },
+      "context_retention": {
+        "dimension": "context_retention",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "78241",
+        "latency_ms": 1252.5
+      },
+      "ambiguity_handling": {
+        "dimension": "ambiguity_handling",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Yes, because you haven't specified which file to send or where it should be sent",
+        "latency_ms": 2463.5
+      },
+      "uncertainty_calibration": {
+        "dimension": "uncertainty_calibration",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "It is impossible to predict the exact closing price of Apple stock on December 3",
+        "latency_ms": 5888.7
+      },
+      "multilingual_ability": {
+        "dimension": "multilingual_ability",
+        "status": "MEASURED",
+        "score": 1.0,
+        "passed": true,
+        "details": "Bonjour",
+        "latency_ms": 645.2
+      }
+    },
+    "metadata": {
+      "format": "gguf",
+      "family": "qwen35",
+      "parameter_size": "1.9B",
+      "quantization": "Q4_K_M",
+      "file_size_mb": 1251.4
+    }
+  }
+}

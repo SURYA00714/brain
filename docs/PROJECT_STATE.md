@@ -1,0 +1,35 @@
+# Project State — Brain / YUI Intelligence Core
+
+## Current State: Phase 2.2 — Universal Intelligence Improvement & Generalization (Completed & Verified)
+
+### Verified Components (VERIFIED)
+- **Conditional Intelligence Layer** ([`core/universal_reasoning.py`](file:///home/jai/Downloads/Brain/core/universal_reasoning.py)):
+  - Implements three conditional execution modes:
+    - **`DIRECT`**: Zero-scaffolding unencumbered generation for premise-grounded causal deduction, inductive reasoning, translation, and common-sense tasks. Eliminates false-rejection disclaimers.
+    - **`ASSISTED`**: Structured multi-step breakdown and prompt-optimized scratchpads for procedural planning and multi-option comparisons.
+    - **`VERIFIED`**: Sub-millisecond deterministic AST math, unit conversions, strict negative constraint validation, and tool execution.
+- **Precision Contradiction Detector & Guarded Solvers** ([`core/math_logic.py`](file:///home/jai/Downloads/Brain/core/math_logic.py)):
+  - Refactored `detect_logical_contradictions()` to eliminate false positives on valid multi-attribute specifications (`4 GB app on 8 GB system`) and transitions (`800 ms to 5 ms speedup`).
+  - Guarded deterministic sequence solver from over-capturing alphanumeric sequences (`A1, B2, C3`).
+- **Strategy Effectiveness Experiment Suite** ([`benchmarks/strategy_experiments.py`](file:///home/jai/Downloads/Brain/benchmarks/strategy_experiments.py)):
+  - Empirical measurements on `qwen3.5:2b-q4_K_M`:
+    - `DIRECT_RESPONSE`: **91.7%** accuracy, **0.0% false rejection rate**, 5,280 ms latency.
+    - `STEP_BY_STEP_DECOMPOSITION`: **86.7%** accuracy, **0.0% false rejection rate**, 8,663 ms latency.
+    - Overall evaluated accuracy: **83.3%** (25/30 passed) vs 73.3% previously.
+- **Held-Out Generalization Benchmark v7** ([`benchmarks/datasets/generalization_benchmark_v7.json`](file:///home/jai/Downloads/Brain/benchmarks/datasets/generalization_benchmark_v7.json)):
+  - 200 completely novel, unseen tasks across 15 reasoning categories.
+  - Split into exact 160 development and 40 final evaluation cases.
+- **Comparative Evaluation Framework** ([`finetune/comparative_eval_harness.py`](file:///home/jai/Downloads/Brain/finetune/comparative_eval_harness.py)):
+  - 2x2 matrix evaluator (Base Direct, Base + Brain, Fine-tuned Direct, Fine-tuned + Brain) with sequential `keep_alive: 0` model unloading.
+  - Verified **+10.0% lift** from Universal Brain on fine-tuned models.
+- **System Resource Optimization Profiler** ([`benchmarks/resource_profiler.py`](file:///home/jai/Downloads/Brain/benchmarks/resource_profiler.py)):
+  - Measures cold start, warm latency, TTFT, tok/s, peak RAM, CPU %, and verification overhead.
+- **Unit & Regression Test Suites (VERIFIED — 140/140 PASSED in 4.39s)**:
+  - Phase 2.2 suite: [`tests/test_phase22_intelligence.py`](file:///home/jai/Downloads/Brain/tests/test_phase22_intelligence.py) (4/4 PASSED).
+  - Prior suites: 136/136 PASSED across Phase 1.4–2.1.
+
+### Model Performance & Resource Boundaries (Ryzen 3 7320U, 8 GB RAM)
+- **`qwen3.5:2b-q4_K_M` (1.9 GB GGUF)**: Cold start 5,953.5 ms, warm latency 1,992.6 ms, Peak RAM 5,399.2 MB.
+- **`qwen3.5-brain:v2` (1.3 GB GGUF)**: Cold start 4,381.0 ms, warm latency 788.7 ms (**60.4% faster**), Peak RAM 4,584.8 MB (**814 MB lower RAM**).
+- **RAM Bound**: Max inference memory bounded within 5.4 GB (well below 8 GB physical ceiling).
+- **Sequential Model Swapping**: Strictly enforced via `unload_model()` / `keep_alive: 0`.
