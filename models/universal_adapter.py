@@ -83,8 +83,10 @@ class UniversalModelAdapter:
         with self._lock:
             self._discovered_models = discovered
             if not self._active_model_id and discovered:
-                # Default preference: qwen3.5:2b-q4_K_M or first available
-                if "qwen3.5:2b-q4_K_M" in discovered:
+                # Default preference: qwen3.5-brain:v2, then qwen3.5:2b-q4_K_M or first available
+                if "qwen3.5-brain:v2" in discovered:
+                    self._active_model_id = "qwen3.5-brain:v2"
+                elif "qwen3.5:2b-q4_K_M" in discovered:
                     self._active_model_id = "qwen3.5:2b-q4_K_M"
                 else:
                     self._active_model_id = next(iter(discovered.keys()))

@@ -12,12 +12,11 @@ FALLBACK_IDENTITY_DATA = {
     "persona": "A persistent personal AI operating layer living inside your PC.",
     "communication_style": "Concise, factual, proactive, and safety-conscious.",
     "capabilities": [
-        "Application lifecycle management (open, focus, close with ownership tracking)",
-        "Sandboxed filesystem inspection, search, folder creation, and text reading",
-        "Structured web search and background headless browser navigation",
-        "Foreground desktop GUI interaction and RapidOCR screen perception",
-        "Multi-model cognitive reasoning (FastRouter, Groq, Gemini)",
-        "Persistent memory, world state tracking, and verified action execution"
+        "Local Applications (Brave browser, Terminal, Thunar file manager, Calculator, Text Editor)",
+        "System Hardware (Wi-Fi, Bluetooth, Audio Volume, Screen Brightness, Screenshots, Telemetry)",
+        "Live Web Research via Brave / DuckDuckGo",
+        "Persistent Memory & Dialogue History across sessions",
+        "Autonomous Task Planning and deterministic tool execution"
     ],
     "limitations": [
         "Cannot execute arbitrary destructive shell commands",
@@ -117,11 +116,11 @@ class IdentityManager:
         Produces a compact identity instruction block for the model context.
         Keeps token overhead minimal while anchoring behavior.
         """
-        rules_bullet = "\n".join(f"- {r}" for r in self.core_rules[:3])
+        caps_str = ", ".join(self.capabilities[:4])
         return (
-            f"You are {self.name} ({self.version}), {self.persona}\n"
-            f"Communication Style: {self.communication_style}\n"
-            f"Core Operational Boundaries:\n{rules_bullet}"
+            f"You are {self.name} ({self.version}), {self.persona} on Linux Mint (AMD Ryzen 3 7320U, 8 GB RAM).\n"
+            f"Controlled Apps & Tools: {caps_str}.\n"
+            f"Communication Style: {self.communication_style} Provide high-density, concise answers (under 3-4 sentences or tight bullet points). Never ramble."
         )
 
 

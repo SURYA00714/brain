@@ -198,6 +198,9 @@ class UniversalReasoningOrchestrator:
         strategy = forced_strategy or self.select_strategy(prompt, profile)
         mode = forced_mode or self.classify_execution_mode(prompt, profile, strategy)
 
+        # Context-aware effective prompt for conversational follow-ups
+        effective_prompt = f"{context.strip()}\n\nCurrent Question: {prompt}" if context and context.strip() else prompt
+
         # === 1. VERIFIED MODE ===
         if mode == ExecutionMode.VERIFIED:
             if strategy == UniversalStrategy.MATHEMATICAL_VERIFICATION:
@@ -218,7 +221,7 @@ class UniversalReasoningOrchestrator:
                     )
                 # If not solved deterministically (e.g. multi-step word problem), solve with clear calculation scratchpad
                 resp = self.adapter.generate(
-                    prompt=prompt,
+                    prompt=effective_prompt,
                     system_prompt=system_prompt or "Solve accurately. Show minimal necessary steps and state the final answer clearly.",
                     model_id=target_model,
                     temperature=0.1,
@@ -275,11 +278,11 @@ class UniversalReasoningOrchestrator:
         # === 2. DIRECT MODE ===
         if mode == ExecutionMode.DIRECT:
             resp = self.adapter.generate(
-                prompt=prompt,
-                system_prompt=system_prompt or "Provide a clear, accurate, and direct response.",
+                prompt=effective_prompt,
+                system_prompt=system_prompt or "Provide a clear, accurate, and direct response. Pay close attention to recent conversation context.",
                 model_id=target_model,
                 temperature=0.1,
-                num_predict=256,
+                num_predict=150,
             )
             dur_ms = (time.perf_counter() - start) * 1000.0
             return UniversalReasoningResult(
@@ -299,7 +302,7 @@ class UniversalReasoningOrchestrator:
         # === 3. ASSISTED MODE ===
         if strategy == UniversalStrategy.UNCERTAINTY_ANALYSIS:
             resp = self.adapter.generate(
-                prompt=prompt,
+                prompt=effective_prompt,
                 system_prompt="Analyze known facts versus unknowable future states. Explicitly state uncertainties.",
                 model_id=target_model,
                 temperature=0.1,
@@ -320,7 +323,7 @@ class UniversalReasoningOrchestrator:
             )
 
         # General Decomposition & Multi-Pass Assistance
-        reasoning_res = self.engine.solve(query=prompt)
+        reasoning_res = self.engine.solve(query=effective_prompt)
         dur_ms = (time.perf_counter() - start) * 1000.0
 
         return UniversalReasoningResult(

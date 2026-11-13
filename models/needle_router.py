@@ -23,7 +23,7 @@ def get_needle():
             _NEEDLE_INSTANCE = needle.Needle()
             logger.info("Initialized native 27MB Needle model successfully.")
         except Exception as e:
-            logger.warning(f"Could not load native Needle model ({e}). Fallback to heuristic.")
+            logger.debug(f"Could not load native Needle model ({e}). Fallback to heuristic.")
             _NEEDLE_INSTANCE = False
     return _NEEDLE_INSTANCE if _NEEDLE_INSTANCE is not False else None
 

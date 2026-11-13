@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Brain — Autonomous AI Task Execution & Reasoning Engine Executable
+# Terminal GUI with Green JetBrains Mono aesthetic, ASCII banner & Emojis
+# Target: AMD Ryzen 3 7320U | 8 GB RAM | Linux Mint 22.3
+# Strictly local intelligence — No Yui or Aoi companion/avatar dependencies.
+# ==============================================================================
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$DIR"
+
+# 1. Direct one-shot prompt execution: brain-app "query"
+if [ "$#" -gt 0 ] && [ "$1" != "--cli" ] && [ "$1" != "--help" ]; then
+    python3 -c "
+import sys
+from core.app_backend import default_app_core
+res = default_app_core.execute_task(' '.join(sys.argv[1:]))
+print(f'[{res.get(\"mode\", \"DIRECT\")} | {res.get(\"strategy\", \"N/A\")}] {res.get(\"text\", \"\")}')
+" "$@"
+    exit 0
+fi
+
+# 2. Help display
+if [ "$1" = "--help" ]; then
+    echo "Usage: brain-app [OPTIONS] [QUERY]"
+    echo ""
+    echo "Options:"
+    echo "  --help     Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  brain-app                           # Launches Creative Terminal GUI"
+    echo "  brain-app \"Calculate 144 / 12 + 5\"   # Fast one-shot execution"
+    exit 0
+fi
+
+# 3. Check if running inside an interactive terminal
+if [ -t 0 ] && [ -t 1 ]; then
+    # Already in interactive terminal: run terminal GUI directly
+    exec python3 brain_tui.py
+else
+    # Launched from desktop icon or GUI file manager without terminal
+    if command -v x-terminal-emulator >/dev/null 2>&1; then
+        exec x-terminal-emulator -T "Brain AI" -e "$0"
+    elif command -v xfce4-terminal >/dev/null 2>&1; then
+        exec xfce4-terminal --title="Brain AI" --command="$0"
+    else
+        exec python3 brain_tui.py
+    fi
+fi

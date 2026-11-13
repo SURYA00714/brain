@@ -419,6 +419,16 @@ class FastRouter:
                     plan.add_step(ExecutionStep(step_id=6, depends_on=[5], action_type="final", answer=f"Opened Brave, opened a new tab, and searched for '{query}'."))
                 return {"type": "plan", "plan": plan}
 
+        # 3a-1b. Open Brave and open a new tab / open new tab in brave
+        if re.search(r"\b(?:open|launch|start)\s+(?:brave|browser)\s+(?:and|,)?\s*(?:open\s+)?(?:a\s+)?new\s+tab\b|\b(?:open\s+)?(?:a\s+)?new\s+tab\s+in\s+(?:brave|browser)\b", norm_text):
+            from tools.plan import ExecutionPlan, ExecutionStep
+            plan = ExecutionPlan(goal=clean_text)
+            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", verification_method="app_running", description="Open Brave browser"))
+            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", verification_method="focus", description="Focus Brave window"))
+            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="NEW_TAB", arguments={}, expected_outcome="New tab ready", verification_method="none", description="Open new tab in Brave"))
+            plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer="Opened Brave browser and opened a new tab successfully."))
+            return {"type": "plan", "plan": plan}
+
         # 3a-2. Open <app> and maximize it / make full screen
         open_max_match = re.match(r"^(?:open|launch|start) (.+?) (?:and |, )?(?:maximize it|maximize|make it full screen|full screen)$", norm_text, flags=re.IGNORECASE)
         if open_max_match:
@@ -431,15 +441,35 @@ class FastRouter:
                 plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened and maximized {app_target}."))
                 return {"type": "plan", "plan": plan}
 
-        # 3a-3. Open Brave and go to / navigate to <url>
-        open_nav_match = re.match(r"^(?:open|launch|start) (?:brave|browser) (?:and |, )?(?:go to|navigate to) (.+)$", norm_text, flags=re.IGNORECASE)
+        # 3a-3. Open Brave and go to / navigate to / open <target>
+        open_nav_match = re.match(r"^(?:open|launch|start)\s+(?:brave|browser)\s+(?:and|,)?\s*(?:go to|navigate to|open|visit)\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if open_nav_match:
-            target_url = open_nav_match.group(1).strip()
-            if target_url:
+            raw_target = open_nav_match.group(1).strip()
+            if raw_target and raw_target not in {"new tab", "a new tab", "tab"}:
+                common_sites = {
+                    "wikipedia": "https://www.wikipedia.org",
+                    "youtube": "https://www.youtube.com",
+                    "google": "https://www.google.com",
+                    "github": "https://www.github.com",
+                    "reddit": "https://www.reddit.com",
+                    "twitter": "https://www.twitter.com",
+                    "x": "https://www.x.com",
+                    "netflix": "https://www.netflix.com",
+                    "amazon": "https://www.amazon.com",
+                }
+                c_low = raw_target.lower()
+                if c_low in common_sites:
+                    target_url = common_sites[c_low]
+                elif "." in raw_target:
+                    target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
+                else:
+                    target_url = f"https://www.{raw_target}.com"
+
                 plan = ExecutionPlan(goal=clean_text)
                 plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
-                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
-                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+                plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
                 return {"type": "plan", "plan": plan}
 
         # 3a. Open Brave and search for X [optional: then tell me what you see]
@@ -560,8 +590,32 @@ class FastRouter:
                             "text editor": "text_editor", "editor": "text_editor",
                             "calculator": "calculator", "calc": "calculator"
                         }
-                        mapped_app = app_map.get(candidate_app.lower(), candidate_app)
-                        return {"type": "tool", "tool": "OPEN_APP", "arguments": {"name": mapped_app, "app_name": mapped_app}}
+                        if candidate_app.lower() in app_map:
+                            mapped_app = app_map[candidate_app.lower()]
+                            return {"type": "tool", "tool": "OPEN_APP", "arguments": {"name": mapped_app, "app_name": mapped_app}}
+
+                        common_sites = {
+                            "wikipedia": "https://www.wikipedia.org",
+                            "youtube": "https://www.youtube.com",
+                            "google": "https://www.google.com",
+                            "github": "https://www.github.com",
+                            "reddit": "https://www.reddit.com",
+                            "twitter": "https://www.twitter.com",
+                            "x": "https://www.x.com",
+                            "netflix": "https://www.netflix.com",
+                            "amazon": "https://www.amazon.com",
+                        }
+                        c_low = candidate_app.lower()
+                        if c_low in common_sites or "." in c_low:
+                            target_url = common_sites.get(c_low, c_low if c_low.startswith(("http://", "https://")) else f"https://{c_low}")
+                            plan = ExecutionPlan(goal=clean_text)
+                            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
+                            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
+                            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+                            plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {candidate_app} in Brave."))
+                            return {"type": "plan", "plan": plan}
+
+                        return {"type": "tool", "tool": "OPEN_APP", "arguments": {"name": candidate_app, "app_name": candidate_app}}
 
             # Close App
             for close_prefix in ["close ", "quit ", "exit ", "kill "]:
@@ -592,40 +646,40 @@ class FastRouter:
                         return {"type": "tool", "tool": "FOCUS_APP", "arguments": {"app_name": app_map[candidate_app]}}
 
             # Screenshot (Raw Screen Capture ONLY, NO OCR)
-            if norm_text in {"take a screenshot", "capture screen", "take screenshot", "screenshot"}:
+            if re.search(r"\b(?:take\s+(?:a\s+)?screenshot|capture\s+(?:the\s+)?screen|take\s+screen\s+capture|screenshot)\b", norm_text):
                 return {"type": "tool", "tool": "SCREENSHOT", "arguments": {}}
 
             # Phase 1: System Control Tools Routing
             # Audio & Brightness
-            if norm_text in {"volume up", "increase volume", "turn up volume", "turn volume up", "volume +"}:
+            if re.search(r"\b(?:volume\s+up|increase\s+volume|turn\s+up\s+volume|turn\s+volume\s+up|volume\s*\+)\b", norm_text):
                 return {"type": "tool", "tool": "VOLUME_UP", "arguments": {}}
-            if norm_text in {"volume down", "decrease volume", "turn down volume", "turn volume down", "volume -"}:
+            if re.search(r"\b(?:volume\s+down|decrease\s+volume|turn\s+down\s+volume|turn\s+volume\s+down|volume\s*\-)\b", norm_text):
                 return {"type": "tool", "tool": "VOLUME_DOWN", "arguments": {}}
-            if norm_text in {"mute", "unmute", "mute volume", "toggle mute", "volume mute"}:
+            if re.search(r"\b(?:mute|unmute|mute\s+volume|toggle\s+mute|volume\s+mute)\b", norm_text):
                 return {"type": "tool", "tool": "VOLUME_MUTE", "arguments": {}}
 
-            if norm_text in {"brightness up", "increase brightness", "turn up brightness", "screen brightness up"}:
+            if re.search(r"\b(?:brightness\s+up|increase\s+brightness|turn\s+up\s+brightness|screen\s+brightness\s+up)\b", norm_text):
                 return {"type": "tool", "tool": "BRIGHTNESS_UP", "arguments": {}}
-            if norm_text in {"brightness down", "decrease brightness", "turn down brightness", "screen brightness down"}:
+            if re.search(r"\b(?:brightness\s+down|decrease\s+brightness|turn\s+down\s+brightness|screen\s+brightness\s+down)\b", norm_text):
                 return {"type": "tool", "tool": "BRIGHTNESS_DOWN", "arguments": {}}
 
-            if norm_text in {"lock screen", "lock computer", "lock desktop", "lock"}:
+            if re.search(r"\b(?:lock\s+screen|lock\s+computer|lock\s+desktop|lock\s+pc)\b", norm_text) or norm_text == "lock":
                 return {"type": "tool", "tool": "LOCK_SCREEN", "arguments": {}}
 
             # Network Controls
-            if norm_text in {"wifi status", "check wifi", "is wifi on", "wifi state"}:
-                return {"type": "tool", "tool": "WIFI_STATUS", "arguments": {}}
-            if norm_text in {"wifi on", "turn on wifi", "enable wifi", "start wifi"}:
-                return {"type": "tool", "tool": "WIFI_ON", "arguments": {}}
-            if norm_text in {"wifi off", "turn off wifi", "disable wifi", "stop wifi"}:
+            if re.search(r"\b(?:turn\s+off|disable|stop|switch\s+off|power\s+off)\s+(?:the\s+)?wi-?fi\b|\bwi-?fi\s+(?:off|disable|disabled)\b", norm_text):
                 return {"type": "tool", "tool": "WIFI_OFF", "arguments": {}}
+            if re.search(r"\b(?:turn\s+on|enable|start|switch\s+on|power\s+on)\s+(?:the\s+)?wi-?fi\b|\bwi-?fi\s+(?:on|enable|enabled)\b", norm_text):
+                return {"type": "tool", "tool": "WIFI_ON", "arguments": {}}
+            if re.search(r"\b(?:check|show|is|get)?\s*(?:the\s+)?wi-?fi\s*(?:status|state|info|enabled|on\??)\b|\bwi-?fi\s+status\b", norm_text):
+                return {"type": "tool", "tool": "WIFI_STATUS", "arguments": {}}
 
-            if norm_text in {"bluetooth status", "check bluetooth", "is bluetooth on", "bluetooth state"}:
-                return {"type": "tool", "tool": "BLUETOOTH_STATUS", "arguments": {}}
-            if norm_text in {"bluetooth on", "turn on bluetooth", "enable bluetooth", "start bluetooth"}:
-                return {"type": "tool", "tool": "BLUETOOTH_ON", "arguments": {}}
-            if norm_text in {"bluetooth off", "turn off bluetooth", "disable bluetooth", "stop bluetooth"}:
+            if re.search(r"\b(?:turn\s+off|disable|stop|switch\s+off|power\s+off)\s+(?:the\s+)?bluetooth\b|\bbluetooth\s+(?:off|disable|disabled)\b", norm_text):
                 return {"type": "tool", "tool": "BLUETOOTH_OFF", "arguments": {}}
+            if re.search(r"\b(?:turn\s+on|enable|start|switch\s+on|power\s+on)\s+(?:the\s+)?bluetooth\b|\bbluetooth\s+(?:on|enable|enabled)\b", norm_text):
+                return {"type": "tool", "tool": "BLUETOOTH_ON", "arguments": {}}
+            if re.search(r"\b(?:check|show|is|get)?\s*(?:the\s+)?bluetooth\s*(?:status|state|info|enabled|on\??)\b|\bbluetooth\s+status\b", norm_text):
+                return {"type": "tool", "tool": "BLUETOOTH_STATUS", "arguments": {}}
 
             # System Information & Metrics
             if norm_text in {"system info", "show system info", "system information", "show system information", "system status"}:

@@ -271,6 +271,7 @@ class WorldStateManager:
         status_flag = f"[{st.observation_status}]"
         lines = [
             f"WORLD STATE {status_flag}:",
+            f"- Current Date & Time: {time.strftime('%Y-%m-%d %H:%M (%A)')}",
             f"- Active Application: {focused_str}",
             f"- Active Window: {st.active_window or 'none'}",
             f"- Running Applications: {running_str}",

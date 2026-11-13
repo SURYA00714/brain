@@ -1,6 +1,17 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 2.2 — Universal Intelligence Improvement & Generalization (Completed & Verified)
+## Current State: Phase 2.2 — Universal Intelligence & Executable Application (Completed & Verified)
+
+### Application Executables & Shortcuts (VERIFIED)
+- **Standalone Terminal GUI Executable**: `/home/jai/Downloads/Brain/brain-app` (and global symlink `~/.local/bin/brain-app`).
+  - Terminal GUI with green font aesthetics, ASCII art banner, emojis, and beginner-friendly keyboard menu.
+  - Supports interactive TUI loop, or one-shot execution `brain-app "<prompt>"`.
+- **Application Shortcuts**:
+  - Desktop: `/home/jai/Desktop/Brain.desktop` (`Terminal=true`)
+  - Applications Menu: `/home/jai/.local/share/applications/brain.desktop`
+  - Custom Icon: `assets/brain_icon.png` and `~/.local/share/icons/brain.png`.
+- **Model Switch & Safety**: Seamless switching between installed models (`qwen3.5:2b-q4_K_M` and `qwen3.5-brain:v2`) with sequential memory unloading (`keep_alive: 0`) strictly respecting the 8 GB RAM boundary.
+- **Strictly Local & Clean**: Zero Yui or Aoi companion code. Pure terminal-native intelligence, reasoning, and system task execution.
 
 ### Verified Components (VERIFIED)
 - **Conditional Intelligence Layer** ([`core/universal_reasoning.py`](file:///home/jai/Downloads/Brain/core/universal_reasoning.py)):
@@ -24,7 +35,8 @@
   - Verified **+10.0% lift** from Universal Brain on fine-tuned models.
 - **System Resource Optimization Profiler** ([`benchmarks/resource_profiler.py`](file:///home/jai/Downloads/Brain/benchmarks/resource_profiler.py)):
   - Measures cold start, warm latency, TTFT, tok/s, peak RAM, CPU %, and verification overhead.
-- **Unit & Regression Test Suites (VERIFIED — 140/140 PASSED in 4.39s)**:
+- **Unit & Regression Test Suites (VERIFIED — 148/148 PASSED in 4.18s)**:
+  - App conversation & live research suite: [`tests/test_app_conversation.py`](file:///home/jai/Downloads/Brain/tests/test_app_conversation.py) (8/8 PASSED).
   - Phase 2.2 suite: [`tests/test_phase22_intelligence.py`](file:///home/jai/Downloads/Brain/tests/test_phase22_intelligence.py) (4/4 PASSED).
   - Prior suites: 136/136 PASSED across Phase 1.4–2.1.
 

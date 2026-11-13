@@ -480,6 +480,9 @@ class CognitiveEngine:
         Decomposes compound user goals into minimal, verifiable ExecutionPlans.
         Example: 'Open Brave and find the latest news about Python. Summarize the important changes.'
         """
+        if not user_request or not isinstance(user_request, str):
+            return None
+
         lowered = user_request.lower()
 
         # Goal pattern: Open browser + search (+ optional click first result)
@@ -649,7 +652,61 @@ class CognitiveEngine:
             ))
             return plan
 
-        # 2. AI-Driven Structured Planning for unfamiliar or complex requests
+        # 2. Universal Compound Action Decomposition
+        # Split sequential sub-actions on " and ", " then ", ", and ", "; "
+        clauses = [c.strip() for c in re.split(r",?\s+and\s+|,?\s+then\s+|;\s*", user_request, flags=re.IGNORECASE) if c.strip()]
+        if len(clauses) >= 2:
+            from tools.router import default_router
+            composite_plan = ExecutionPlan(goal=user_request)
+            curr_step_id = 1
+            prev_dep = []
+            all_resolved = True
+
+            for clause in clauses:
+                sub_match = default_router.route(clause)
+                if sub_match:
+                    if sub_match.get("type") == "tool":
+                        t_name = sub_match.get("tool")
+                        t_args = sub_match.get("arguments", {})
+                        composite_plan.add_step(ExecutionStep(
+                            step_id=curr_step_id,
+                            depends_on=list(prev_dep),
+                            action_type="tool",
+                            tool_name=t_name,
+                            arguments=t_args,
+                            description=clause
+                        ))
+                        prev_dep = [curr_step_id]
+                        curr_step_id += 1
+                    elif sub_match.get("type") == "plan":
+                        sub_p = sub_match.get("plan")
+                        if sub_p and sub_p.steps:
+                            for s in sub_p.steps:
+                                if s.action_type != "final":
+                                    composite_plan.add_step(ExecutionStep(
+                                        step_id=curr_step_id,
+                                        depends_on=list(prev_dep),
+                                        action_type=s.action_type,
+                                        tool_name=s.tool_name,
+                                        arguments=s.arguments,
+                                        description=s.description or clause
+                                    ))
+                                    prev_dep = [curr_step_id]
+                                    curr_step_id += 1
+                else:
+                    all_resolved = False
+                    break
+
+            if all_resolved and len(composite_plan.steps) >= len(clauses):
+                composite_plan.add_step(ExecutionStep(
+                    step_id=curr_step_id,
+                    depends_on=list(prev_dep),
+                    action_type="final",
+                    answer=f"Completed compound task: {user_request}"
+                ))
+                return composite_plan
+
+        # 3. AI-Driven Structured Planning for unfamiliar or complex requests
         return self.generate_structured_plan(user_request)
 
     def _get_tools_prompt_snippet(self, user_request: str = "") -> str:
@@ -941,7 +998,7 @@ class CognitiveEngine:
 
         effective_tier = tier or ("AUTO" if (self.gateway.providers["groq"].is_available() or self.gateway.providers["gemini"].is_available()) else "LOCAL")
         current_prompt = base_prompt
-        token_budget = 512
+        token_budget = 768
 
         for attempt in range(max_retries + 1):
             resp = self.gateway.generate(
