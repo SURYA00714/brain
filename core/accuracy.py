@@ -260,6 +260,81 @@ class AccuracyEngine:
         return conflicts
 
     @classmethod
+    def synthesize_multi_source(cls, query: str, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Synthesizes information across multiple documents/web sources,
+        cross-verifies statements, detects conflicts, and calculates source agreement.
+        Each document is expected to have 'source' and 'text'.
+        """
+        if not documents:
+            return {
+                "success": False,
+                "query": query,
+                "findings": [],
+                "sources": [],
+                "conflicts": [],
+                "source_agreement": 0.0,
+                "summary": "No documents provided for synthesis."
+            }
+
+        extracted_findings: List[str] = []
+        sources: List[str] = []
+        doc_keyword_sets: List[set] = []
+
+        for doc in documents:
+            src = doc.get("source", "unknown")
+            text = doc.get("text", "").strip()
+            if not text:
+                continue
+            sources.append(src)
+            extracted_findings.append(text)
+            doc_keyword_sets.append(set(cls.extract_keywords(text)))
+
+        if not extracted_findings:
+            return {
+                "success": False,
+                "query": query,
+                "findings": [],
+                "sources": [],
+                "conflicts": [],
+                "source_agreement": 0.0,
+                "summary": "Empty content in provided documents."
+            }
+
+        # Cross-source keyword overlap
+        if len(doc_keyword_sets) > 1:
+            all_kw = set.union(*doc_keyword_sets) if doc_keyword_sets else set()
+            common_kw = set.intersection(*doc_keyword_sets) if doc_keyword_sets else set()
+            jaccard = len(common_kw) / max(1, len(all_kw))
+            agreement = min(1.0, jaccard * 3.0)  # normalize topical alignment
+        else:
+            agreement = 1.0
+
+        # Check for numeric or unit conflicts across findings
+        conflicts = cls.detect_conflicts(extracted_findings)
+
+        # Detect time/date conflicts if present
+        time_vals = set()
+        for f in extracted_findings:
+            for t_match in re.findall(r"\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b", f.lower()):
+                time_vals.add(t_match)
+        if len(time_vals) > 1:
+            conflicts.append(f"Conflicting times detected: {', '.join(sorted(time_vals))}")
+            agreement = min(agreement, 0.5)
+
+        summary_bullets = "\n".join(f"- [{src}] {text[:150]}" for src, text in zip(sources, extracted_findings))
+
+        return {
+            "success": True,
+            "query": query,
+            "findings": extracted_findings,
+            "sources": sources,
+            "conflicts": conflicts,
+            "source_agreement": round(agreement, 3),
+            "summary": summary_bullets
+        }
+
+    @classmethod
     def verify_claims(cls, answer: str, evidence: List[str]) -> Dict[str, Any]:
         """
         Verifies whether concrete factual tokens (numbers, URLs) in an answer

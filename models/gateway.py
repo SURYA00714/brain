@@ -236,6 +236,17 @@ class OllamaProvider:
         except Exception:
             return False
 
+    def list_models(self) -> List[Dict[str, Any]]:
+        """Queries local Ollama tags endpoint to list installed models and architectures."""
+        try:
+            r = requests.get(f"{self.base_url}/api/tags", timeout=2.0)
+            if r.status_code == 200:
+                data = r.json()
+                return data.get("models", [])
+            return []
+        except Exception:
+            return []
+
     def generate(
         self,
         prompt: str,
@@ -350,6 +361,16 @@ class ModelGateway:
 
     def get_provider(self, name: str) -> Any:
         return self.providers.get(name.lower())
+
+    def discover_local_models(self) -> List[Dict[str, Any]]:
+        """
+        Discovers all available local offline models via the Ollama provider.
+        Returns list of model dictionaries with name, size, and quantization info.
+        """
+        ollama = self.providers.get("ollama")
+        if ollama and hasattr(ollama, "list_models"):
+            return ollama.list_models()
+        return []
 
     def get_cloud_status(self) -> Dict[str, Any]:
         groq_avail = self.providers["groq"].is_available()

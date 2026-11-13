@@ -7,7 +7,7 @@ without requiring process restarts.
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 @dataclass
@@ -104,4 +104,94 @@ class SessionManager:
             self._current_session.last_activity = time.time()
 
 
+@dataclass
+class UserProfile:
+    """Individual personal environment profile for multi-user adaptation."""
+    name: str = "default"
+    working_style: str = "concise"  # concise, thorough, beginner, technical
+    preferred_model: str = "qwen3.5:2b-q4_K_M"
+    custom_instructions: str = ""
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "UserProfile":
+        return cls(
+            name=data.get("name", "default"),
+            working_style=data.get("working_style", "concise"),
+            preferred_model=data.get("preferred_model", "qwen3.5:2b-q4_K_M"),
+            custom_instructions=data.get("custom_instructions", ""),
+            created_at=data.get("created_at", time.time()),
+            updated_at=data.get("updated_at", time.time())
+        )
+
+
+class UserProfileManager:
+    """Manages isolated personal environments, preferences, and workflows per user."""
+    def __init__(self, profiles_dir: Optional[Any] = None):
+        import os
+        from pathlib import Path
+        self.profiles_dir = Path(profiles_dir) if profiles_dir else Path("data/profiles")
+        self.profiles_dir.mkdir(parents=True, exist_ok=True)
+        self.active_profile_file = self.profiles_dir / "active.txt"
+        self._ensure_default_profile()
+
+    def _ensure_default_profile(self) -> None:
+        default_file = self.profiles_dir / "default.json"
+        if not default_file.exists():
+            prof = UserProfile(name="default")
+            self._save_profile_file(prof)
+        if not self.active_profile_file.exists():
+            self.active_profile_file.write_text("default", encoding="utf-8")
+
+    def _save_profile_file(self, profile: UserProfile) -> None:
+        import json
+        prof_file = self.profiles_dir / f"{profile.name}.json"
+        prof_file.write_text(json.dumps(profile.to_dict(), indent=2), encoding="utf-8")
+
+    def get_active_profile(self) -> UserProfile:
+        import json
+        name = "default"
+        if self.active_profile_file.exists():
+            name = self.active_profile_file.read_text(encoding="utf-8").strip() or "default"
+        prof_file = self.profiles_dir / f"{name}.json"
+        if prof_file.exists():
+            try:
+                data = json.loads(prof_file.read_text(encoding="utf-8"))
+                return UserProfile.from_dict(data)
+            except Exception:
+                pass
+        return UserProfile(name=name)
+
+    def switch_profile(self, name: str) -> UserProfile:
+        self.active_profile_file.write_text(name, encoding="utf-8")
+        return self.get_active_profile()
+
+    def create_profile(
+        self,
+        name: str,
+        working_style: str = "concise",
+        preferred_model: str = "qwen3.5:2b-q4_K_M",
+        custom_instructions: str = ""
+    ) -> UserProfile:
+        prof = UserProfile(
+            name=name,
+            working_style=working_style,
+            preferred_model=preferred_model,
+            custom_instructions=custom_instructions
+        )
+        self._save_profile_file(prof)
+        return prof
+
+    def list_profiles(self) -> List[str]:
+        profiles = []
+        for f in self.profiles_dir.glob("*.json"):
+            profiles.append(f.stem)
+        return sorted(profiles)
+
+
+default_user_profile_manager = UserProfileManager()
 default_session_manager = SessionManager()

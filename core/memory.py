@@ -542,6 +542,27 @@ class MemoryStore:
             })
         return events
 
+    def purge_memory(self, memory_id: Optional[int] = None, subject: Optional[str] = None, key: Optional[str] = None) -> int:
+        """
+        User Privacy Control: Selectively purges memories by ID or subject/key match.
+        Returns the number of deleted records.
+        """
+        deleted_count = 0
+        with self._conn:
+            if memory_id is not None:
+                cursor = self._conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+                deleted_count = cursor.rowcount
+            elif subject is not None and key is not None:
+                cursor = self._conn.execute("DELETE FROM memories WHERE subject = ? AND key = ?", (subject, key))
+                deleted_count = cursor.rowcount
+            elif subject is not None:
+                cursor = self._conn.execute("DELETE FROM memories WHERE subject = ?", (subject,))
+                deleted_count = cursor.rowcount
+            elif key is not None:
+                cursor = self._conn.execute("DELETE FROM memories WHERE key = ?", (key,))
+                deleted_count = cursor.rowcount
+        return deleted_count
+
     def clear(self) -> None:
         """Clears all stored memories and events (primarily for test resets)."""
         with self._conn:

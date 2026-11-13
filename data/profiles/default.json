@@ -1,0 +1,8 @@
+{
+  "name": "default",
+  "working_style": "concise",
+  "preferred_model": "qwen3.5:2b-q4_K_M",
+  "custom_instructions": "",
+  "created_at": 1794589294.2683156,
+  "updated_at": 1794589294.2683165
+}
