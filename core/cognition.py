@@ -126,6 +126,27 @@ class CognitiveEngine:
             deterministic_solution_available=False
         )
 
+    def determine_execution_mode(self, user_request: str) -> str:
+        """Determines contextual execution strategy mode: FOREGROUND, BACKGROUND, or AUTO."""
+        if not user_request or not isinstance(user_request, str):
+            return "AUTO"
+        lowered = user_request.lower()
+        foreground_patterns = [
+            r"\b(?:in|using|use|via|through|inside)\s+(?:the\s+)?(?:brave|browser|terminal|files?|editor)\b",
+            r"\b(?:open|launch|focus|switch\s+to)\s+(?:brave|browser|terminal|thunar|calculator)\b",
+            r"\b(?:visibly|on\s+screen|interactive|foreground)\b",
+            r"\b(?:click|type|scroll|press\s+key)\b"
+        ]
+        background_patterns = [
+            r"\b(?:without\s+opening\s+(?:the\s+)?browser|in\s+(?:the\s+)?background|headless)\b",
+            r"\b(?:search\s+(?:the\s+)?web\s+for|list\s+files|find\s+.*files?|read\s+text\s+file)\b"
+        ]
+        if any(re.search(p, lowered) for p in foreground_patterns):
+            return "FOREGROUND"
+        if any(re.search(p, lowered) for p in background_patterns) and not any(re.search(p, lowered) for p in foreground_patterns):
+            return "BACKGROUND"
+        return "AUTO"
+
     def understand_intent(self, user_request: str) -> Dict[str, Any]:
         """
         Classifies request intent:
@@ -137,23 +158,25 @@ class CognitiveEngine:
         - COMPOUND_GOAL (multi-step action + perception)
         - TROUBLESHOOTING (diagnostic inspection + reasoning)
         - AMBIGUOUS
+        Returns dictionary including 'intent', 'level', and 'execution_mode'.
         """
         if not user_request or not isinstance(user_request, str):
-            return {"intent": "AMBIGUOUS", "confidence": 0.0, "details": "Empty request"}
+            return {"intent": "AMBIGUOUS", "confidence": 0.0, "details": "Empty request", "execution_mode": "AUTO"}
 
         text = user_request.strip()
         lowered = text.lower().strip(".?!")
+        exec_mode = self.determine_execution_mode(text)
 
         # 1. Conversation
         greetings = {"hello", "hi", "hey", "ello", "hiya", "good morning", "good evening", "what's up", "sup"}
         gratitudes = {"thanks", "thank you", "thx", "appreciate it"}
         farewells = {"bye", "goodbye", "see you", "exit", "quit"}
         if lowered in greetings or lowered in gratitudes or lowered in farewells:
-            return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC}
+            return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC, "execution_mode": exec_mode}
 
         # Identity
         if lowered in {"who are you", "what are you", "what can you do", "capabilities", "help"}:
-            return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC}
+            return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC, "execution_mode": exec_mode}
 
         # 2. Ambiguity check (requires actual conversational referent, not unrelated OS focus)
         clarification = AccuracyEngine.detect_ambiguity(text, recent_turns=self.short_term_mem.turns)
@@ -161,7 +184,8 @@ class CognitiveEngine:
             return {
                 "intent": "AMBIGUOUS",
                 "level": CognitiveLevel.LEVEL_0_DETERMINISTIC,
-                "clarification": clarification
+                "clarification": clarification,
+                "execution_mode": exec_mode
             }
 
         # Unverifiable real-time physical/astronomical telemetry (data-driven epistemic safety)
@@ -173,13 +197,14 @@ class CognitiveEngine:
             return {
                 "intent": "UNVERIFIABLE",
                 "level": CognitiveLevel.LEVEL_0_DETERMINISTIC,
-                "message": "I do not have verified real-time astronomical or rover telemetry for Mars for today, and could not verify that information."
+                "message": "I do not have verified real-time astronomical or rover telemetry for Mars for today, and could not verify that information.",
+                "execution_mode": exec_mode
             }
 
         # 3. Troubleshooting & Diagnostics
         trouble_triggers = ["crashing", "crash", "slow", "freezing", "freeze", "error", "broken", "why is my", "what could be wrong", "investigate it", "find out why"]
         if any(trig in lowered for trig in trouble_triggers):
-            return {"intent": "TROUBLESHOOTING", "level": CognitiveLevel.LEVEL_2_NORMAL}
+            return {"intent": "TROUBLESHOOTING", "level": CognitiveLevel.LEVEL_2_NORMAL, "execution_mode": exec_mode}
 
         # 4. Research vs Static Information vs General Reasoning
         # Freshness triggers require live web research
@@ -194,31 +219,31 @@ class CognitiveEngine:
 
         # Static educational concepts
         if self.handle_static_information(user_request) is not None:
-            return {"intent": "INFORMATION", "level": CognitiveLevel.LEVEL_1_SIMPLE}
+            return {"intent": "INFORMATION", "level": CognitiveLevel.LEVEL_1_SIMPLE, "execution_mode": exec_mode}
 
         if is_fresh or (is_search and ("summarize" in lowered or "what you find" in lowered)):
-            return {"intent": "RESEARCH", "level": CognitiveLevel.LEVEL_2_NORMAL}
+            return {"intent": "RESEARCH", "level": CognitiveLevel.LEVEL_2_NORMAL, "execution_mode": exec_mode}
 
         # 5. Visual requests
         visual_triggers = ["tell me what you see", "what is on the screen", "describe the screen", "what do you see", "read screen"]
         if any(v in lowered for v in visual_triggers):
-            return {"intent": "VISUAL", "level": CognitiveLevel.LEVEL_4_VISUAL}
+            return {"intent": "VISUAL", "level": CognitiveLevel.LEVEL_4_VISUAL, "execution_mode": exec_mode}
 
         # 6. Compound multi-step requests
         if (" and " in lowered or "," in lowered) and any(kw in lowered for kw in ["open", "search", "tell me", "summarize", "find", "check"]):
-            return {"intent": "COMPOUND_GOAL", "level": CognitiveLevel.LEVEL_1_SIMPLE}
+            return {"intent": "COMPOUND_GOAL", "level": CognitiveLevel.LEVEL_1_SIMPLE, "execution_mode": exec_mode}
 
         # 7. PC Action
         if any(lowered.startswith(act) for act in ["open ", "close ", "launch ", "switch to ", "focus ", "kill "]):
-            return {"intent": "PC_ACTION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC}
+            return {"intent": "PC_ACTION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC, "execution_mode": exec_mode}
 
         # 8. General Open-Ended Reasoning (Comparative, Explanatory, Informational)
         reasoning_starters = ("compare ", "explain ", "difference between", "why ", "how ", "what ", "who ", "which ")
         if any(lowered.startswith(rs) or f" {rs}" in lowered for rs in reasoning_starters):
-            return {"intent": "GENERAL_REASONING", "level": CognitiveLevel.LEVEL_2_NORMAL}
+            return {"intent": "GENERAL_REASONING", "level": CognitiveLevel.LEVEL_2_NORMAL, "execution_mode": exec_mode}
 
         # Action / operational task goals fall through to the multi-step planner loop
-        return {"intent": "TASK_GOAL", "level": CognitiveLevel.LEVEL_2_NORMAL}
+        return {"intent": "TASK_GOAL", "level": CognitiveLevel.LEVEL_2_NORMAL, "execution_mode": exec_mode}
 
     def determine_cognitive_level(self, intent_dict: Dict[str, Any]) -> CognitiveLevel:
         """Assigns the explicit execution level."""

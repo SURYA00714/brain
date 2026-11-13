@@ -267,3 +267,15 @@
   - Implemented consecutive read-only tool invocation checks in `non_progress_count` to prevent perception deadlocks.
 - **Verification**:
   - Full automated suite: **718 tests executed, 717 passed, 1 skipped, 0 failures, 0 errors** (59.67s).
+
+### Phase 2.4 — Modular Architecture Refactoring & God File Decoupling (2026-11-13)
+- **Modular Subsystem Extraction**:
+  - Extracted prompt generation and safety rules from `brain.py` into external template `prompts/planner_template.txt` and `core/planner.py` (`build_planner_prompt`, `clean_search_query`, `parse_model_action`, `is_visual_request`).
+  - Extracted plan execution and task state tracking into `core/executor.py` (`TaskState`, `execute_plan`).
+  - Extracted deterministic pre-routing pipeline into `core/router_pipeline.py` (`process_fast_route`, `FastRouteResult`).
+  - Replaced brittle keyword matching in execution mode selection with contextual regex parsing in `core/cognition.py` (`determine_execution_mode`).
+- **`brain.py` Decoupling & Line Reduction**:
+  - Reduced `brain.py` from 1,324 lines down to ~600 lines (over 54% reduction) while preserving 100% backward compatibility via symbol re-exporting.
+  - Eliminated duplicate `TaskState` and `execute_plan` implementations.
+- **Verification**:
+  - Full automated suite: **718 tests executed, 717 passed, 1 skipped, 0 failures, 0 errors** (55.98s).
