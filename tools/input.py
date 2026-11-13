@@ -647,3 +647,41 @@ def select_semantic_element(option, role="dropdown", label=None):
     return type_text(option)
 
 
+from enum import Enum
+
+
+class PermissionRole(Enum):
+    """Vision Domain 2.9: Security permission roles."""
+    GUEST_READONLY = "GUEST_READONLY"
+    STANDARD_USER = "STANDARD_USER"
+    ADMINISTRATOR = "ADMINISTRATOR"
+
+
+class SecurityPolicyManager:
+    """
+    Manages role-based authorization for tool execution.
+    Restricts write/system operations when operating under limited permissions.
+    """
+    GUEST_RESTRICTED_TOOLS = frozenset({
+        "WRITE_TEXT_FILE", "CREATE_FOLDER", "CREATE_FILE", "COPY_FILE",
+        "MOVE_FILE", "RENAME_FILE", "DELETE_FILE", "SHUTDOWN", "RESTART",
+        "SUSPEND", "LOGOUT", "WIFI_ON", "WIFI_OFF", "BLUETOOTH_ON", "BLUETOOTH_OFF"
+    })
+
+    def __init__(self, role: PermissionRole = PermissionRole.STANDARD_USER):
+        self.current_role = role
+
+    def set_role(self, role: PermissionRole) -> None:
+        self.current_role = role
+
+    def authorize_action(self, tool_name: str, arguments: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        t_name = str(tool_name).upper().strip()
+        if self.current_role == PermissionRole.GUEST_READONLY:
+            if t_name in self.GUEST_RESTRICTED_TOOLS:
+                return False, f"Permission Denied: Guest role is restricted from performing modifying action '{t_name}'."
+        return True, None
+
+
+default_security_policy_manager = SecurityPolicyManager()
+
+

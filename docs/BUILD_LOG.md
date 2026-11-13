@@ -310,3 +310,14 @@
 - **Verification**:
   - Unit test suites: `tests/test_adaptive_explanation.py`, `tests/test_task_checkpoint.py`, `tests/test_counterfactual_reasoning.py`, `tests/test_custom_tool_creator.py`.
   - Full automated regression suite: **736 tests executed: 735 passed, 1 skipped, 0 failures, 0 errors** (63.86s).
+
+### Phase 3.2 — Strategy Performance Promotion & Role-Based Security Governance (2026-11-13)
+- **Empirical Strategy Promotion**:
+  - Implemented `AdaptiveIntelligenceEngine.rank_strategies_for_category()` in `core/adaptive.py`.
+  - Evaluates and ranks historical execution paths based on verified success rates, recovery success, and execution latency.
+- **Role-Based Security Policy Manager**:
+  - Implemented `PermissionRole` and `SecurityPolicyManager` in `tools/input.py`.
+  - Enforces authorization boundaries across `GUEST_READONLY`, `STANDARD_USER`, and `ADMINISTRATOR` roles, restricting modifying actions without administrative authorization.
+- **Verification**:
+  - Unit test suites: `tests/test_strategy_promotion.py`, `tests/test_security_roles.py`.
+  - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (54.53s).

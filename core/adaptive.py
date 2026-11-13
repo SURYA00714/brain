@@ -583,6 +583,28 @@ class AdaptiveIntelligenceEngine:
             "user_correction_freq": round(corr_cnt / n, 3),
         }
 
+    def rank_strategies_for_category(self, task_category: str) -> List[Dict[str, Any]]:
+        """
+        Vision Domain 2.6: Ranks execution strategies for a task category based on empirical
+        historical success rates, verified completion ratios, and latency.
+        """
+        rows = self._conn.execute("""
+            SELECT DISTINCT strategy_used
+            FROM task_experiences
+            WHERE task_category = ?
+        """, (task_category,)).fetchall()
+
+        stats_list = []
+        for r in rows:
+            st = r["strategy_used"]
+            s = self.get_strategy_stats(task_category, st, min_samples=1)
+            if not s.get("insufficient_samples", False) or s.get("sample_size", 0) > 0:
+                stats_list.append(s)
+
+        # Sort primarily by task_success_rate descending, then verified_completion_rate, then lowest avg latency
+        stats_list.sort(key=lambda x: (x.get("task_success_rate", 0.0), x.get("verified_completion_rate", 0.0), -x.get("avg_execution_ms", 99999.0)), reverse=True)
+        return stats_list
+
     def close(self) -> None:
         if self._conn:
             try:
