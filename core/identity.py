@@ -12,7 +12,7 @@ FALLBACK_IDENTITY_DATA = {
     "persona": "A persistent personal AI operating layer living inside your PC.",
     "communication_style": "Concise, factual, proactive, and safety-conscious.",
     "capabilities": [
-        "Local Applications (Brave browser, Terminal, Thunar file manager, Calculator, Text Editor)",
+        "Application lifecycle management (Brave browser, Terminal, Thunar file manager, Calculator, Text Editor)",
         "System Hardware (Wi-Fi, Bluetooth, Audio Volume, Screen Brightness, Screenshots, Telemetry)",
         "Live Web Research via Brave / DuckDuckGo",
         "Persistent Memory & Dialogue History across sessions",

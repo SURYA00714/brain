@@ -21,17 +21,15 @@ from core.memory import default_memory
 from core.world_state import default_world_state
 from core.context import default_context_builder
 from core.cognition import default_cognition, verify_step_execution, validate_step_permissions, validate_step_parameters
-
-
-URL = "http://localhost:11434/api/generate"
-MODEL = "llama-3.1-8b-instant"
-MAX_STEPS = 10
-ALLOWED_INTENTS = {
-    "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "OPEN_BRAVE", "WEB_SEARCH",
-    "BROWSER_SEARCH", "BROWSER_NAVIGATE", "BROWSER_SEARCH_FOREGROUND",
-    "LIST_FILES", "FIND_FILES", "READ_TEXT_FILE", "CREATE_FOLDER",
-    "CHAT", "TIME", "SCREENSHOT", "ANALYZE_SCREEN", "REMEMBER"
-}
+from core.formatter import format_tool_response
+from brain_constants import (
+    UI_MODIFYING_TOOLS,
+    DESTRUCTIVE_TOOLS,
+    ALLOWED_INTENTS,
+    APPROVED_BROWSER_KEYWORDS,
+    MAX_STEPS,
+    MAX_RECOVERY_ATTEMPTS,
+)
 
 # (skipping helper functions clean_search_query & parse_model_action)
 
@@ -44,11 +42,10 @@ def determine_execution_mode(user_request):
     if not user_request or not isinstance(user_request, str):
         return "AUTO"
     lowered = user_request.lower()
-    foreground_kws = ["in brave", "use brave", "open brave", "open browser", "in browser", "using brave", "visibly", "in the browser"]
-    if any(kw in lowered for kw in foreground_kws):
+    if any(kw in lowered for kw in APPROVED_BROWSER_KEYWORDS):
         return "FOREGROUND"
     background_kws = ["search web for", "search the web for", "list files", "find python files", "read text file", "without opening the browser"]
-    if any(kw in lowered for kw in background_kws) and not any(kw in lowered for kw in foreground_kws):
+    if any(kw in lowered for kw in background_kws) and not any(kw in lowered for kw in APPROVED_BROWSER_KEYWORDS):
         return "BACKGROUND"
     return "AUTO"
 
@@ -242,7 +239,7 @@ def is_visual_request(request_text):
 def build_planner_prompt(user_request, history):
     """Builds system prompt for the LLM specifying tools, JSON format, screen observations, and isolated task history."""
     req_lowered = user_request.lower() if user_request else ""
-    gui_browser_req = any(kw in req_lowered for kw in ["open brave", "in brave", "open browser", "in the browser", "using brave"])
+    gui_browser_req = any(kw in req_lowered for kw in APPROVED_BROWSER_KEYWORDS)
 
     tools_info = ""
     for tool in default_registry.list_tools():
@@ -421,12 +418,6 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
     Returns final response string.
     """
     task_state = TaskState(user_request)
-    ui_modifying_tools = {
-        "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "CLICK", "DOUBLE_CLICK", "CLICK_ELEMENT",
-        "TYPE_TEXT", "TYPE_IN_ELEMENT", "PRESS_KEY", "HOTKEY", "SCROLL",
-        "BROWSER_SEARCH", "BROWSER_NAVIGATE", "BROWSER_SEARCH_FOREGROUND"
-    }
-
     last_tool_res = None
     step_idx = 0
 
@@ -519,7 +510,7 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
             result = registry.execute(tool_name, args)
             t1 = time.time()
             dur_ms = (t1 - t0) * 1000.0
-            profiler.record_tool(tool_name, t1 - t0, is_gui=(tool_name in ui_modifying_tools))
+            profiler.record_tool(tool_name, t1 - t0, is_gui=(tool_name in UI_MODIFYING_TOOLS))
 
             # 7. Evidence-Based Verification
             is_verified, ver_status, ver_reason = verify_step_execution(tool_name, args, result)
@@ -533,7 +524,7 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
 
             if is_verified:
                 last_tool_res = result
-                if tool_name in ui_modifying_tools:
+                if tool_name in UI_MODIFYING_TOOLS:
                     analyze_captured_screen(force_refresh=True)
             else:
                 # 8. Adaptive Cognitive Recovery & Retry Loop
@@ -569,43 +560,10 @@ def execute_plan(plan, registry, profiler, user_request, mode="AUTO", quiet=Fals
     default_memory.record_event("PLAN", f"Goal: {user_request}", status="COMPLETED")
 
     # Derive response from last tool result if no explicit final step was provided
-    if last_tool_res and last_tool_res.get("success"):
+    if last_tool_res:
         tool_name = plan.steps[-1].tool_name if plan.steps else ""
-        if tool_name == "TIME":
-            return last_tool_res.get("data") or "Current time retrieved."
-        elif tool_name == "OPEN_APP":
-            app = plan.steps[-1].arguments.get("app_name", "")
-            return f"{app.title() if app else 'Application'} is open."
-        elif tool_name == "CLOSE_APP":
-            return last_tool_res.get("data") or "Application closed."
-        elif tool_name in ("LIST_FILES", "FIND_FILES", "READ_TEXT_FILE"):
-            return f"Here are the file results: {json.dumps(last_tool_res.get('data'))}"
-        elif tool_name == "CHECK_DISK_SPACE":
-            return last_tool_res.get("data") or "Disk space checked successfully."
-        elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
-            search_data = last_tool_res.get("results") or last_tool_res.get("data")
-            if isinstance(search_data, list):
-                bullet_pts = []
-                for item in search_data[:5]:
-                    if isinstance(item, dict):
-                        title = item.get("title", "")
-                        snip = item.get("snippet", "")
-                        bullet_pts.append(f"- {title}: {snip}")
-                    else:
-                        bullet_pts.append(f"- {item}")
-                return "Search results:\n" + "\n".join(bullet_pts)
-            return f"Search results:\n{search_data}"
-        elif tool_name == "ANALYZE_SCREEN":
-            raw_d = last_tool_res.get("data")
-            if isinstance(raw_d, dict) and isinstance(raw_d.get("data"), str):
-                return raw_d.get("data")
-            elems = last_tool_res.get("elements", []) if isinstance(last_tool_res, dict) else []
-            perc = last_tool_res.get("perception") or {}
-            detected_texts = perc.get("detected_text") or [e.get("text") for e in elems if isinstance(e, dict) and e.get("text")]
-            if detected_texts:
-                sample = ", ".join(f"'{t}'" for t in detected_texts[:8])
-                return f"I observed the screen ({len(elems)} elements detected, state: {perc.get('screen_state', 'NORMAL')}). Visible content includes: {sample}."
-            return f"Screen analyzed. Found {len(elems)} visible elements."
+        last_args = plan.steps[-1].arguments if plan.steps else {}
+        return format_tool_response(tool_name, last_tool_res, last_args)
 
     return "Task completed successfully."
 
@@ -636,13 +594,15 @@ def run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=Fal
     Returns final answer string or error message.
     """
     _notify_companion("THINKING", "Processing request...")
-    res = _raw_run_planner_task(user_request, registry=registry, max_steps=max_steps, quiet=quiet, debug=debug)
-    if isinstance(res, str) and res.startswith("Brain Error"):
-        _notify_companion("ERROR", "Action halted", result=res[:60])
-    else:
-        _notify_companion("SUCCESS", "Task complete", result=str(res)[:60])
-        _companion_speak(str(res))
-    return res
+    from core.telemetry import default_telemetry
+    with default_telemetry.track_request(user_request):
+        res = _raw_run_planner_task(user_request, registry=registry, max_steps=max_steps, quiet=quiet, debug=debug)
+        if isinstance(res, str) and res.startswith("Brain Error"):
+            _notify_companion("ERROR", "Action halted", result=res[:60])
+        else:
+            _notify_companion("SUCCESS", "Task complete", result=str(res)[:60])
+            _companion_speak(str(res))
+        return res
 
 
 def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quiet=False, debug=False):
@@ -654,7 +614,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
 
     from core.telemetry import default_telemetry
     t_req_start = time.perf_counter()
-    telemetry = default_telemetry.start_request(user_request)
+    telemetry = default_telemetry.current
 
     # Phase 15: Zero-Latency Immediate Safety Screen (<1ms)
     t_safe0 = time.perf_counter()
@@ -675,12 +635,6 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
     default_vision.clear_observation()
     from tools.input import default_chain_tracker
     default_chain_tracker.clear()
-
-    ui_modifying_tools = {
-        "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "CLICK", "DOUBLE_CLICK", "CLICK_ELEMENT",
-        "TYPE_TEXT", "TYPE_IN_ELEMENT", "PRESS_KEY", "HOTKEY", "SCROLL",
-        "BROWSER_SEARCH", "BROWSER_NAVIGATE", "BROWSER_SEARCH_FOREGROUND"
-    }
 
     # Phase 14: Short-Term Memory Reference Resolution ("close it", "search that", etc.)
     from core.context import default_short_term_memory
@@ -768,7 +722,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             t_start = time.perf_counter()
             result = registry.execute(tool_name, args)
             t_end = time.perf_counter()
-            profiler.record_tool(tool_name, t_end - t_start, is_gui=(tool_name in ui_modifying_tools))
+            profiler.record_tool(tool_name, t_end - t_start, is_gui=(tool_name in UI_MODIFYING_TOOLS))
 
             # Phase 18: Physical State Verification
             if result.get("success"):
@@ -792,69 +746,13 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                         result = {"success": False, "error": f"Verification failed: Process '{app_to_check}' is still active."}
 
             if result.get("success"):
-                if tool_name in ui_modifying_tools:
+                if tool_name in UI_MODIFYING_TOOLS:
                     t_obs0 = time.perf_counter()
                     analyze_captured_screen(force_refresh=True)
                     t_obs1 = time.perf_counter()
                     profiler.record_verification(t_obs1 - t_obs0)
 
-                if tool_name == "TIME":
-                    resp = result.get("data") if result.get("data") else "Current time retrieved."
-                elif tool_name == "OPEN_APP":
-                    if result.get("success"):
-                        data_val = result.get("data", {})
-                        app_title = data_val.get("name") if isinstance(data_val, dict) else (args.get("name") or args.get("app_name") or "Application")
-                        if app_title.lower().startswith("brave"):
-                            resp = "Brave is open."
-                        else:
-                            resp = f"{app_title} is open."
-                    else:
-                        err_str = str(result.get("error", "Unknown error"))
-                        if err_str.startswith("Error:"):
-                            resp = err_str
-                        else:
-                            resp = f"Brain Error: Action 'OPEN_APP' failed ({err_str}). Plan halted."
-                elif tool_name == "LIST_APPS":
-                    if result.get("success"):
-                        apps_data = result.get("data", {}).get("apps", [])
-                        if apps_data:
-                            lines = ["Installed GUI applications:\n"]
-                            for app in apps_data:
-                                lines.append(f"- {app.get('name')}")
-                            resp = "\n".join(lines)
-                        else:
-                            resp = "No installed GUI applications discovered."
-                    else:
-                        resp = f"Error listing applications: {result.get('error')}"
-                elif tool_name == "CLOSE_APP":
-                    resp = str(result.get("data")) if result.get("data") else "Application closed."
-                elif tool_name == "FOCUS_APP":
-                    app = args.get("app_name", "")
-                    app_map = {"brave": "Brave", "file_manager": "File Manager", "terminal": "Terminal", "text_editor": "Text Editor", "calculator": "Calculator"}
-                    name_str = app_map.get(app, app.title() if app else "Application")
-                    resp = f"{name_str} window is focused."
-                elif tool_name == "SCREENSHOT":
-                    resp = "Screenshot captured successfully."
-                elif tool_name in ("LIST_FILES", "FIND_FILES", "READ_TEXT_FILE"):
-                    data_str = json.dumps(result.get("data"))
-                    resp = f"Here are the file results: {data_str}"
-                elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
-                    search_data = result.get("data") or result.get("results")
-                    resp = f"Search results:\n{search_data}"
-                elif tool_name == "CHECK_DISK_SPACE":
-                    resp = str(result.get("data") or "Disk space checked successfully.")
-                elif tool_name == "ANALYZE_SCREEN":
-                    raw_d = result.get("data")
-                    if isinstance(raw_d, str) and raw_d:
-                        resp = raw_d
-                    elif isinstance(raw_d, dict) and isinstance(raw_d.get("data"), str):
-                        resp = raw_d.get("data")
-                    else:
-                        scr = result.get("screen", {}) or (raw_d.get("screen", {}) if isinstance(raw_d, dict) else {})
-                        elems = result.get("elements", []) or (raw_d.get("elements", []) if isinstance(raw_d, dict) else [])
-                        resp = f"Screen captured ({scr.get('width', 1920)}x{scr.get('height', 1080)}). Found {len(elems)} visible elements."
-                else:
-                    resp = str(result.get("data") or "Task completed.")
+                resp = format_tool_response(tool_name, result, args)
 
                 app_ref = args.get("app_name") if tool_name in ("OPEN_APP", "CLOSE_APP", "FOCUS_APP") else None
                 query_ref = args.get("query") if "SEARCH" in tool_name else None
@@ -884,7 +782,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
                 default_telemetry.finish_request()
                 return resp
             else:
-                if tool_name == "REMEMBER" or (result.get("error") and ("Safety Block:" in str(result.get("error")) or "Verification failed:" in str(result.get("error")))):
+                if tool_name == "REMEMBER" or (result.get("error") and any(k in str(result.get("error")) for k in ("Safety Block:", "Verification failed:", "not in the approved safety allowlist", "not installed", "not found"))):
                     profiler.record_total()
                     profiler.log_summary(user_request, mode="AUTO", status="FAILED")
                     telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
@@ -998,10 +896,10 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             default_telemetry.finish_request()
             return diag_res
 
-        # 6. Epistemic Safety Check for unverified astronomical/impossible queries
-        if "on mars today" in effective_request.lower() or "happened on mars" in effective_request.lower():
-            mars_ans = "I do not have verified real-time astronomical or rover telemetry for Mars for today, and could not verify that information."
-            default_short_term_memory.add_turn(user_request, mars_ans)
+        # 6. Unverifiable Epistemic Refusal (extraterrestrial/unobservable real-time events)
+        if intent_name == "UNVERIFIABLE":
+            unverifiable_ans = intent_info.get("message", "I do not have verified real-time information for that query.")
+            default_short_term_memory.add_turn(user_request, unverifiable_ans)
             profiler.record_route("COGNITIVE_ENGINE", "EPISTEMIC_SAFETY")
             profiler.record_total()
             profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
@@ -1009,7 +907,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             telemetry.llm_calls_this_request = 0
             telemetry.provenance = "STATIC"
             default_telemetry.finish_request()
-            return mars_ans
+            return unverifiable_ans
 
         # 7. General Open-Ended Reasoning (Comparative, Explanatory)
         if intent_name == "GENERAL_REASONING":
@@ -1042,9 +940,8 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
 
     # Execution Mode Determination
     exec_mode = determine_execution_mode(user_request)
+    gui_browser_req = any(kw in user_request.lower() for kw in APPROVED_BROWSER_KEYWORDS)
 
-    # Task State Isolation: guarantee fresh start for each independent user task
-    default_vision.clear_observation()
     task_state = TaskState(user_request)
 
     # Phase 11: World State & Task Context Sync
@@ -1158,8 +1055,6 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             # Application GUI Task Routing Enforcement:
             # If user explicitly requested doing a browser GUI action (e.g. "Open Brave, search..."),
             # block substitution of background WEB_SEARCH tool to force direct GUI execution in the opened browser.
-            req_lowered = user_request.lower()
-            gui_browser_req = any(kw in req_lowered for kw in ["open brave", "in brave", "open browser", "in the browser", "using brave"])
             if not registry.has_tool(tool_name):
                 result = {
                     "success": False,
@@ -1183,9 +1078,16 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             if debug:
                 print(f"[DEBUG] TOOL RESULT ({tool_name}): {result}")
 
-            # Verify action outcome
+            # Verify action outcome and goal progress
             verification_status = "UNVERIFIED"
-            if result.get("success"):
+            is_read_only = tool_name in ("ANALYZE_SCREEN", "SCREENSHOT", "TIME", "LIST_APPS")
+            last_was_read_only = bool(history and history[-1]["action"].get("tool", "").upper() in ("ANALYZE_SCREEN", "SCREENSHOT", "TIME", "LIST_APPS"))
+
+            if is_read_only and last_was_read_only:
+                # Consecutive read-only perception without state modification indicates lack of progress
+                non_progress_count += 1
+                verification_status = "VERIFIED" if result.get("success") else "UNVERIFIED"
+            elif result.get("success"):
                 verification_status = "VERIFIED"
                 non_progress_count = 0
             else:
@@ -1237,7 +1139,7 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
             })
 
             # Smart Observation Policy: refresh screen observation after UI-changing tools
-            if tool_name in ui_modifying_tools and result.get("success"):
+            if tool_name in UI_MODIFYING_TOOLS and result.get("success"):
                 analyze_captured_screen(force_refresh=True)
 
             # Print tool result notice

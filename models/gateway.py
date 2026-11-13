@@ -139,7 +139,7 @@ class GeminiProvider:
         key = self.api_key if self.api_key is not None else (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", ""))
         return bool(key and key.strip())
 
-    def generate(self, prompt: str, timeout: float = 30.0, system_prompt: Optional[str] = None) -> ModelResponse:
+    def generate(self, prompt: str, timeout: float = 30.0, system_prompt: Optional[str] = None, image_path: Optional[str] = None) -> ModelResponse:
         key = self.api_key if self.api_key is not None else (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", ""))
         if not key:
             return ModelResponse(
@@ -156,7 +156,25 @@ class GeminiProvider:
         contents = []
         if system_prompt:
             contents.append({"role": "user", "parts": [{"text": f"System Instructions: {system_prompt}"}]})
-        contents.append({"role": "user", "parts": [{"text": prompt}]})
+
+        user_parts = [{"text": prompt}]
+        if image_path:
+            import base64
+            from pathlib import Path
+            img_p = Path(image_path)
+            if img_p.exists():
+                img_bytes = img_p.read_bytes()
+                mime = "image/png"
+                if img_p.suffix.lower() in (".jpg", ".jpeg"):
+                    mime = "image/jpeg"
+                b64 = base64.b64encode(img_bytes).decode("utf-8")
+                user_parts.append({
+                    "inlineData": {
+                        "mimeType": mime,
+                        "data": b64
+                    }
+                })
+        contents.append({"role": "user", "parts": user_parts})
 
         payload = {"contents": contents}
 
@@ -411,8 +429,25 @@ class ModelGateway:
         timeout: float = 30.0,
         system_prompt: Optional[str] = None,
         think: bool = False,
-        num_predict: int = 384
+        num_predict: int = 384,
+        image_path: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
     ) -> ModelResponse:
+        if image_path:
+            if not self.providers["gemini"].is_available():
+                return ModelResponse(
+                    success=False,
+                    error="Vision model unavailable offline. Requires Gemini API key or online vision endpoint.",
+                    provider="gemini",
+                    fallback_used=False
+                )
+            return self.providers["gemini"].generate(
+                prompt=prompt,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                image_path=image_path
+            )
+
         tier_upper = tier.upper()
 
         if tier_upper == "LOCAL":

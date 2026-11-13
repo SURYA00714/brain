@@ -52,6 +52,9 @@ class AgentLoop:
         default_resource_governor.check_and_govern()
         default_proactive_awareness.inspect_environment()
 
+        from core.companion_state import default_interruption_controller
+        default_interruption_controller.reset()
+
         # 1. UNDERSTAND & IMMEDIATE SAFETY CHECK
         is_safe, safety_err = screen_prompt_safety(user_request)
         if not is_safe:
@@ -246,7 +249,7 @@ class AgentLoop:
             verified = False
 
             if tool_name == "OPEN_APP":
-                app_to_check = args.get("app_name", "")
+                app_to_check = args.get("app_name") or args.get("name") or ""
                 ver_res = verify_app_open(app_to_check, timeout=1.5)
                 verified = ver_res.get("verified", False)
                 if not verified:

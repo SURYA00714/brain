@@ -345,8 +345,8 @@ class VisionProvider:
         if len(elements) > self._max_elements:
             elements = elements[:self._max_elements]
 
-        from tools.apps import default_app_tracker
-        focused_app = default_app_tracker.get_focused_app() or "desktop"
+        from tools.apps import default_app_tracker, get_active_window_app_name
+        focused_app = default_app_tracker.get_focused_app() or get_active_window_app_name() or "desktop"
 
         obs = {
             "success": raw_res.get("success", True),

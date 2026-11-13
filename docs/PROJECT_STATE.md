@@ -1,6 +1,17 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 2.2 — Universal Intelligence & Executable Application (Completed & Verified)
+## Current State: Phase 2.3 — Architecture Hygiene, Unified Formatter & Telemetry (Completed & Verified)
+
+### Architectural Refactor Highlights (VERIFIED)
+- **Centralized System Constants** ([`brain_constants.py`](file:///home/jai/Downloads/Brain/brain_constants.py)): Single source of truth for UI modifying tools, destructive safety boundaries, allowed intents, approved browser keywords, and execution step bounds.
+- **Unified Tool Response Formatter** ([`core/formatter.py`](file:///home/jai/Downloads/Brain/core/formatter.py)): Consolidated `format_tool_response()` eliminating duplicate and subtly divergent formatting between `execute_plan()` and `_raw_run_planner_task()`.
+- **Telemetry Context Manager** ([`core/telemetry.py`](file:///home/jai/Downloads/Brain/core/telemetry.py)): Implemented `TelemetryContext` and `track_request()` guaranteeing duration tracking and finalized telemetry across early exits and fallbacks.
+- **Cognitive Epistemic Safety Refusal** ([`core/cognition.py`](file:///home/jai/Downloads/Brain/core/cognition.py)): Replaced ad-hoc string checks in execution loops with data-driven `UNVERIFIABLE` intent classification.
+- **Perception Deadlock Prevention** ([`brain.py`](file:///home/jai/Downloads/Brain/brain.py)): Detects consecutive read-only perception loops and halts safely without burning step budgets.
+- **Unit & Regression Test Suites (VERIFIED — 718/718 Tests Passing)**:
+  - 717 passed, 1 skipped, 0 failures, 0 errors in 59.67s.
+
+## Previous Phase: Phase 2.2 — Universal Intelligence & Executable Application (Completed & Verified)
 
 ### Application Executables & Shortcuts (VERIFIED)
 - **Standalone Terminal GUI Executable**: `/home/jai/Downloads/Brain/brain-app` (and global symlink `~/.local/bin/brain-app`).

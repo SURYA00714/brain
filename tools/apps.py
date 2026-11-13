@@ -175,11 +175,10 @@ class AppTracker:
         self._currently_focused_app = normalize_app_name(app_name)
 
     def get_focused_app(self):
-        if os.environ.get("BRAIN_MOCK_GUI") != "1":
-            active = get_active_window_app_name()
-            if active:
-                self._currently_focused_app = active
-                return active
+        active = get_active_window_app_name()
+        if active:
+            self._currently_focused_app = active
+            return active
         return self._currently_focused_app
 
     def close_app(self, app_name):
@@ -307,6 +306,8 @@ def is_window_open(app_name):
 
 def get_active_window_app_name():
     """Returns the normalized app_name of the currently focused window on desktop."""
+    if os.environ.get("BRAIN_MOCK_GUI") == "1":
+        return None
     try:
         res = subprocess.run(["xdotool", "getactivewindow", "getwindowname"], capture_output=True, text=True, timeout=2)
         if res.returncode == 0:

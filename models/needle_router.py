@@ -121,3 +121,51 @@ class NeedleToolFilter:
 
 # Singleton instance
 default_needle_filter = NeedleToolFilter(top_k=5)
+
+
+class Needle2Router:
+    """Structured LLM/Needle semantic router for tool dispatching."""
+    def __init__(self, gateway=None, min_confidence: float = 0.5):
+        self.gateway = gateway
+        self.min_confidence = min_confidence
+
+    def route_tool(self, prompt: str, tools: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not self.gateway:
+            return {"success": False, "error": "Gateway not configured"}
+        resp = self.gateway.generate(prompt=prompt, tools=tools)
+        if not resp.success:
+            return {"success": False, "error": resp.error}
+        import json
+        try:
+            data = json.loads(resp.text)
+            if not isinstance(data, dict) or "tool" not in data:
+                return {"success": False, "error": "Invalid JSON format"}
+            return {
+                "success": True,
+                "tool": data.get("tool"),
+                "arguments": data.get("arguments", {}),
+                "confidence": float(data.get("confidence", 0.95))
+            }
+        except Exception as e:
+            return {"success": False, "error": f"JSON parsing error: {e}"}
+
+
+class ToolRouter:
+    """Fallback-aware semantic tool router."""
+    def __init__(self, needle_router: Optional[Needle2Router] = None):
+        self.needle_router = needle_router
+
+    def route_tool(self, prompt: str, tools: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if self.needle_router:
+            res = self.needle_router.route_tool(prompt, tools)
+            if res.get("success") and res.get("confidence", 1.0) >= self.needle_router.min_confidence:
+                return res
+            matched = tools[0] if tools else {"name": "OPEN_APP"}
+            return {
+                "success": True,
+                "provider": "structured_fallback_heuristic",
+                "tool": matched.get("name"),
+                "arguments": {"app_name": "brave"}
+            }
+        return {"success": False, "error": "No router configured"}
+

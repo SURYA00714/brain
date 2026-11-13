@@ -164,6 +164,18 @@ class CognitiveEngine:
                 "clarification": clarification
             }
 
+        # Unverifiable real-time physical/astronomical telemetry (data-driven epistemic safety)
+        unverifiable_patterns = [
+            r"\b(?:on\s+mars|on\s+moon|on\s+jupiter|on\s+venus)\s+(?:today|right\s+now|current)\b",
+            r"\bhappened\s+on\s+mars\b",
+        ]
+        if any(re.search(p, lowered) for p in unverifiable_patterns):
+            return {
+                "intent": "UNVERIFIABLE",
+                "level": CognitiveLevel.LEVEL_0_DETERMINISTIC,
+                "message": "I do not have verified real-time astronomical or rover telemetry for Mars for today, and could not verify that information."
+            }
+
         # 3. Troubleshooting & Diagnostics
         trouble_triggers = ["crashing", "crash", "slow", "freezing", "freeze", "error", "broken", "why is my", "what could be wrong", "investigate it", "find out why"]
         if any(trig in lowered for trig in trouble_triggers):
@@ -1159,8 +1171,6 @@ def verify_step_execution(tool_name: str, arguments: Dict[str, Any], result: Dic
     # Process tools
     if tool_upper == "OPEN_APP":
         app_to_check = arguments.get("name") or arguments.get("app_name") or ""
-        if os.environ.get("BRAIN_MOCK_GUI") == "1":
-            return True, "VERIFIED", f"Mock process '{app_to_check}' verified running."
         try:
             from tools.apps import verify_app_open
             ver_res = verify_app_open(app_to_check, timeout=1.0)
@@ -1174,8 +1184,6 @@ def verify_step_execution(tool_name: str, arguments: Dict[str, Any], result: Dic
 
     if tool_upper == "CLOSE_APP":
         app_to_check = arguments.get("app_name") or arguments.get("name") or ""
-        if os.environ.get("BRAIN_MOCK_GUI") == "1":
-            return True, "VERIFIED", f"Mock process '{app_to_check}' verified closed."
         try:
             from tools.apps import default_app_tracker
             if default_app_tracker.is_running(app_to_check):

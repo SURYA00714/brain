@@ -171,6 +171,10 @@ class TestPhase6TaskContinuityAndMemory(unittest.TestCase):
     def setUp(self):
         self.stm = ShortTermMemory()
 
+    def tearDown(self):
+        from core.companion_state import default_interruption_controller
+        default_interruption_controller.reset()
+
     def test_resolve_references_task_commands(self):
         self.stm.add_turn("Search python tutorials", "Searching web for python tutorials", referenced_query="python tutorials")
 

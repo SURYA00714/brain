@@ -249,3 +249,21 @@
 - **Verification**:
   - Added unit tests in `tests/test_app_conversation.py`.
   - **148/148 tests passing** in 4.18s.
+
+### Phase 2.3 — Architecture Hygiene, Unified Formatter & Telemetry Context Management (2026-11-13)
+- **Centralized System Constants**:
+  - Created `brain_constants.py` as single source of truth for `UI_MODIFYING_TOOLS`, `DESTRUCTIVE_TOOLS`, `ALLOWED_INTENTS`, `APPROVED_BROWSER_KEYWORDS`, `MAX_STEPS`, and `MAX_RECOVERY_ATTEMPTS`.
+  - Removed duplicate `ui_modifying_tools` definitions and dead constants (`URL`, `MODEL`).
+- **Unified Tool Response Formatting**:
+  - Implemented `core/formatter.py` (`format_tool_response`), eliminating duplicate and divergent string-formatting logic between `execute_plan()` and `_raw_run_planner_task()`.
+- **Telemetry Lifecycle & Context Management**:
+  - Enhanced `core/telemetry.py` with `TelemetryContext` and `track_request(request_text)`.
+  - Guaranteed deterministic latency measurement and `finish_request()` execution across early exits and fallbacks.
+- **Cognitive Epistemic Refusal**:
+  - Moved extraterrestrial/astronomical unobservable checks out of execution loops into `core/cognition.py` under the data-driven `UNVERIFIABLE` intent classification.
+- **Execution Loop Hygiene & Perception Loop Detection**:
+  - Lifted `gui_browser_req` keyword matching outside the multi-step planner while loop.
+  - Removed redundant screen observation clears.
+  - Implemented consecutive read-only tool invocation checks in `non_progress_count` to prevent perception deadlocks.
+- **Verification**:
+  - Full automated suite: **718 tests executed, 717 passed, 1 skipped, 0 failures, 0 errors** (59.67s).
