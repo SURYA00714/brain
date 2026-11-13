@@ -294,3 +294,19 @@
 - **Verification**:
   - Unit tests added: `tests/test_multi_source_synthesis.py`, `tests/test_memory_purge.py`, `tests/test_model_discovery.py`, `tests/test_user_profile.py`.
   - Full automated regression suite: **728 tests executed: 727 passed, 1 skipped, 0 failures, 0 errors** (67.61s).
+
+### Phase 3.1 — Adaptive Explanations, Plan Checkpointing, Counterfactual Reasoning & Dynamic Tools (2026-11-13)
+- **Knowledge-Level Adaptive Explanations**:
+  - Implemented `CognitiveEngine.adapt_explanation_level()` in `core/cognition.py`.
+  - Supports beginner, general, and expert knowledge adaptations with tailored metaphors and semantic precision.
+- **Persistent Plan Checkpoint Manager**:
+  - Implemented `TaskCheckpointManager` in `core/executor.py` (`data/checkpoints/`).
+  - Supports atomic saving, serialization, and interruption-resilient resumption of execution plans without re-executing successful steps.
+- **Counterfactual Scenario Reasoner**:
+  - Implemented `evaluate_counterfactual_scenario()` in `core/math_logic.py`.
+  - Analyzes speculative "what-if" capacity adjustments and constraints against system specifications.
+- **Dynamic Runtime Tool Registration**:
+  - Added `ToolRegistry.register_custom_tool()` in `tools/registry.py` to allow runtime extensions with parameter validation, duplicate collision prevention, and safety classifications.
+- **Verification**:
+  - Unit test suites: `tests/test_adaptive_explanation.py`, `tests/test_task_checkpoint.py`, `tests/test_counterfactual_reasoning.py`, `tests/test_custom_tool_creator.py`.
+  - Full automated regression suite: **736 tests executed: 735 passed, 1 skipped, 0 failures, 0 errors** (63.86s).

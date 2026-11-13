@@ -275,6 +275,40 @@ class CognitiveEngine:
 
         return None
 
+    def adapt_explanation_level(self, concept: str, base_definition: str, level: str = "general") -> str:
+        """
+        Vision Domain 2.1: Adapts explanations to the user's knowledge level:
+        - 'beginner': Uses intuitive analogies, concrete metaphors (e.g. desks, workshops), avoids heavy jargon.
+        - 'expert': Deep technical breakdown, structural parameters, precision semantics.
+        - 'general': Balanced clear explanation.
+        """
+        lvl = (level or "general").lower().strip()
+        c_low = concept.lower().strip()
+
+        analogies = {
+            "ram": ("Think of it like a physical desk workspace: RAM is the desk where your active papers sit right in front of you for instant access, while your hard drive or SSD is a filing cabinet in the corner where you store files long-term.",
+                    "Random Access Memory (RAM) is high-speed, byte-addressable volatile semiconductor memory directly interfaced with the memory controller via high-bandwidth memory channels, providing nanosecond-scale latency for CPU instruction and operand pipelines."),
+            "cpu": ("Think of the CPU like the brain or head chef in a restaurant kitchen: it takes instructions step-by-step, calculates what needs to happen, and directs all the other hardware components to execute tasks.",
+                    "The Central Processing Unit (CPU) executes serialized machine-code instructions through fetch-decode-execute instruction pipelines, arithmetic logic units (ALUs), and hierarchical hardware caches (L1/L2/L3)."),
+            "dns": ("Think of DNS like the Contacts app on your phone: instead of memorizing 10-digit phone numbers for everyone you know, you type their name and your phone looks up the right number automatically.",
+                    "Domain Name System (DNS) is a distributed, hierarchical naming database protocol operating predominantly over UDP/TCP port 53 that resolves fully qualified domain names (FQDNs) into IPv4 (A) or IPv6 (AAAA) network endpoints."),
+            "docker": ("Think of Docker containers like shipping containers for software: everything an application needs to run is packed cleanly inside a standardized box so it runs identically on any computer.",
+                       "Docker utilizes Linux kernel cgroups, namespaces, and union file systems (overlay2) to isolate operating-system-level execution environments with minimal virtualization overhead compared to hypervisor-based virtual machines.")
+        }
+
+        if c_low in analogies:
+            beg_analog, exp_desc = analogies[c_low]
+            if lvl in ("beginner", "simple", "kid"):
+                return f"{concept.upper()} explained simply:\n{beg_analog}"
+            elif lvl in ("expert", "advanced", "technical"):
+                return f"{concept.upper()} Technical Specification:\n{exp_desc}"
+
+        if lvl in ("beginner", "simple", "kid"):
+            return f"In simple terms: {base_definition}"
+        elif lvl in ("expert", "advanced", "technical"):
+            return f"Technical Overview: {base_definition}"
+        return base_definition
+
     def execute_web_research(self, query: str) -> Dict[str, Any]:
         """
         Conducts grounded web research: SEARCH -> COLLECT -> FILTER -> SYNTHESIZE.

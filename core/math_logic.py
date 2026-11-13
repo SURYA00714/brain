@@ -242,3 +242,57 @@ def try_deterministic_math_or_logic(query: str) -> Optional[Dict[str, Any]]:
                 return {"solved": True, "answer": f"{ans}", "method": "deterministic_ast_math", "confidence": 1.0}
 
     return None
+
+
+def evaluate_counterfactual_scenario(query: str) -> Dict[str, Any]:
+    """
+    Vision Domain 2.2: Counterfactual reasoning evaluator.
+    Evaluates 'what if' speculative scenarios with altered numeric constraints/capacities.
+    """
+    if not query or not isinstance(query, str):
+        return {"valid": False, "conclusion": "Invalid query"}
+
+    lowered = query.lower().strip()
+    if not any(k in lowered for k in ("what if", "suppose", "assuming")):
+        return {"valid": False, "conclusion": "Not a counterfactual query"}
+
+    # Pattern: what if X changed/increased/decreased from A to B on a C system/limit
+    m_cf = re.search(
+        r"(?:increased|changed|increased\s+from|from)?\s*(\d+(?:\.\d+)?)\s*(gb|mb|tb|ghz|%)\s*(?:to|into)\s*(\d+(?:\.\d+)?)\s*(gb|mb|tb|ghz|%)\s*(?:on|in|with)\s*(?:an?|the)?\s*(\d+(?:\.\d+)?)\s*(gb|mb|tb|ghz|%)",
+        lowered
+    )
+
+    if m_cf:
+        from_val = float(m_cf.group(1))
+        from_unit = m_cf.group(2).lower()
+        to_val = float(m_cf.group(3))
+        to_unit = m_cf.group(4).lower()
+        limit_val = float(m_cf.group(5))
+        limit_unit = m_cf.group(6).lower()
+
+        # Check unit consistency
+        if to_unit == limit_unit:
+            if to_val <= limit_val:
+                diff = limit_val - to_val
+                conclusion = f"Counterfactual scenario is feasible: {to_val} {to_unit} fits within the {limit_val} {limit_unit} limit with {diff:.1f} {limit_unit} remaining."
+                feasible = True
+            else:
+                excess = to_val - limit_val
+                conclusion = f"Counterfactual scenario exceeds system limits: {to_val} {to_unit} exceeds the {limit_val} {limit_unit} capacity by {excess:.1f} {limit_unit}."
+                feasible = False
+
+            return {
+                "valid": True,
+                "feasible": feasible,
+                "initial_value": from_val,
+                "target_value": to_val,
+                "limit_value": limit_val,
+                "metric": to_unit,
+                "conclusion": conclusion
+            }
+
+    return {
+        "valid": True,
+        "feasible": True,
+        "conclusion": f"Counterfactual scenario analyzed: {query}"
+    }

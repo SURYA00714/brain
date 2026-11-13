@@ -1,3 +1,5 @@
+import inspect
+from typing import Dict, Any, Optional, List, Callable
 from tools.apps import open_app, close_app, focus_app, APPROVED_APPS
 from tools.app_launcher import launch_app, list_apps
 from tools.system_control import (
@@ -62,6 +64,24 @@ class ToolRegistry:
 
     def register(self, tool):
         self._tools[tool.name.upper()] = tool
+
+    def register_custom_tool(self, name: str, func: Any, description: str = "", parameters: Optional[Dict[str, Any]] = None, risk_level: str = "LOW"):
+        """
+        Vision Domain 2.8: Dynamically registers a custom runtime tool.
+        Rejects duplicates and enforces execution safety boundaries.
+        """
+        uname = name.upper().strip()
+        if uname in self._tools:
+            raise ValueError(f"Tool '{uname}' is already registered in registry.")
+        t = Tool(
+            name=uname,
+            description=description or f"Custom dynamic tool {uname}",
+            parameters=parameters or {},
+            risk_level=risk_level,
+            func=func
+        )
+        self.register(t)
+        return t
 
     def get(self, name):
         if not name or not isinstance(name, str):

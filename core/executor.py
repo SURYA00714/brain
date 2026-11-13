@@ -11,7 +11,7 @@ from brain_constants import UI_MODIFYING_TOOLS
 from tools.vision import default_vision
 from tools.screen import analyze_captured_screen
 from tools.input import validate_gui_action_safety
-from tools.plan import ExecutionPlan
+from tools.plan import ExecutionPlan, ExecutionStep
 from core.memory import default_memory
 from core.world_state import default_world_state
 from core.cognition import (
@@ -70,6 +70,74 @@ class TaskState:
             "task_status": self.task_status,
             "verification_status": self.verification_status
         }
+
+
+class TaskCheckpointManager:
+    """
+    Vision Domain 2.3: Checkpoints execution plans across long-running tasks,
+    enabling bounded recovery and resumption after interruptions.
+    """
+    def __init__(self, checkpoint_dir: Optional[Any] = None):
+        import os
+        from pathlib import Path
+        self.dir = Path(checkpoint_dir) if checkpoint_dir else Path("data/checkpoints")
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+    def _file_path(self, task_id: str):
+        return self.dir / f"{task_id}.json"
+
+    def save_checkpoint(self, task_id: str, plan: ExecutionPlan) -> None:
+        import json
+        data = {
+            "task_id": task_id,
+            "plan": plan.to_dict(),
+            "timestamp": time.time()
+        }
+        self._file_path(task_id).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def has_checkpoint(self, task_id: str) -> bool:
+        return self._file_path(task_id).exists()
+
+    def load_checkpoint(self, task_id: str) -> Optional[ExecutionPlan]:
+        import json
+        f = self._file_path(task_id)
+        if not f.exists():
+            return None
+        try:
+            raw = json.loads(f.read_text(encoding="utf-8"))
+            plan_data = raw.get("plan", {})
+            plan = ExecutionPlan(goal=plan_data.get("goal", ""))
+            plan.status = plan_data.get("status", "PENDING")
+            plan.current_step_idx = plan_data.get("current_step_idx", 0)
+            plan.recovery_count = plan_data.get("recovery_count", 0)
+
+            for s_data in plan_data.get("steps", []):
+                step = ExecutionStep.from_dict(s_data)
+                if step:
+                    if "status" in s_data:
+                        step.set_status(s_data["status"])
+                    if "verification_status" in s_data:
+                        step.verification_status = s_data["verification_status"]
+                    if "duration_ms" in s_data:
+                        step.duration_ms = s_data["duration_ms"]
+                    if "retry_count" in s_data:
+                        step.retry_count = s_data["retry_count"]
+                    plan.steps.append(step)
+
+            return plan
+        except Exception:
+            return None
+
+    def clear_checkpoint(self, task_id: str) -> None:
+        f = self._file_path(task_id)
+        if f.exists():
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+
+default_task_checkpoint_manager = TaskCheckpointManager()
 
 
 def execute_plan(
