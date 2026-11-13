@@ -571,6 +571,8 @@ class FastRouter:
             plan = ExecutionPlan(goal=clean_text)
             plan.add_step(ExecutionStep(action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "terminal"}))
             plan.add_step(ExecutionStep(action_type="tool", tool_name="CHECK_DISK_SPACE", arguments={"target_path": "/"}))
+            if any(k in norm_text for k in ("close", "exit", "quit")):
+                plan.add_step(ExecutionStep(action_type="tool", tool_name="CLOSE_APP", arguments={"app_name": "terminal"}))
             return {"type": "plan", "plan": plan}
 
         # List Apps (Developer/Debug Installed Applications Inventory)
@@ -579,9 +581,21 @@ class FastRouter:
             return {"type": "tool", "tool": "LIST_APPS", "arguments": {}}
 
         # 3. Dedicated Pre-Router for Filesystem and Folder Operations (before App Launch)
+        file_read_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:read|view|show|display|cat)\s+(?:the\s+)?(?:text\s+)?file\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if file_read_match:
+            f_path = file_read_match.group(1).strip()
+            if f_path:
+                return {"type": "tool", "tool": "READ_TEXT_FILE", "arguments": {"filepath": f_path}}
+
         folder_open_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|show|list)\s+(?:the\s+)?(?:folder|directory)\s*(?:called\s+|named\s+)?(.+)$", norm_text, flags=re.IGNORECASE)
         if folder_open_match:
             f_target = folder_open_match.group(1).strip()
+            if f_target:
+                return {"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": f_target}}
+
+        files_list_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:list|show)\s+(?:the\s+)?files\s+(?:in|inside|under)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if files_list_match:
+            f_target = files_list_match.group(1).strip()
             if f_target:
                 return {"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": f_target}}
 

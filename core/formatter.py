@@ -83,7 +83,8 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
         return "Screenshot captured successfully."
 
     if tool_upper in ("LIST_FILES", "FIND_FILES", "READ_TEXT_FILE"):
-        return f"Here are the file results: {json.dumps(result.get('data'))}"
+        data = result.get("data")
+        return f"Here are the file results: {data if isinstance(data, str) else json.dumps(data)}"
 
     if tool_upper in ("WEB_SEARCH", "BROWSER_SEARCH"):
         raw_res = result.get("data") or result.get("results")

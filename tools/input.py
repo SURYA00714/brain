@@ -1,5 +1,7 @@
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Tuple, Optional, Any, Dict, List
 
@@ -23,6 +25,7 @@ except (ImportError, Exception):
     mouse_ctrl = None
     key_ctrl = None
 
+HAS_XDOTOOL = bool(shutil.which("xdotool"))
 
 # Allowed key names allowlist
 VALID_KEYS = {
@@ -57,6 +60,36 @@ PYNPUT_KEY_MAP = {
     "shift": Key.shift if HAS_PYNPUT else "shift",
     "super": Key.cmd if HAS_PYNPUT else "super",
     "win": Key.cmd if HAS_PYNPUT else "win",
+}
+
+XDOTOOL_KEY_MAP = {
+    "enter": "Return",
+    "return": "Return",
+    "tab": "Tab",
+    "space": "space",
+    "backspace": "BackSpace",
+    "escape": "Escape",
+    "esc": "Escape",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "home": "Home",
+    "end": "End",
+    "pageup": "Page_Up",
+    "pagedown": "Page_Down",
+    "delete": "Delete",
+    "ctrl": "ctrl",
+    "ctrlleft": "Control_L",
+    "ctrlright": "Control_R",
+    "alt": "alt",
+    "altleft": "Alt_L",
+    "altright": "Alt_R",
+    "shift": "shift",
+    "shiftleft": "Shift_L",
+    "shiftright": "Shift_R",
+    "super": "Super_L",
+    "win": "Super_L",
 }
 
 MAX_TEXT_LENGTH = 2000
@@ -307,6 +340,8 @@ def move_mouse(x, y):
             pyautogui.moveTo(cx, cy)
         elif HAS_PYNPUT and mouse_ctrl:
             mouse_ctrl.position = (cx, cy)
+        elif HAS_XDOTOOL:
+            subprocess.run(["xdotool", "mousemove", str(cx), str(cy)], check=True, timeout=2.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"x": cx, "y": cy}
@@ -330,6 +365,12 @@ def click_mouse(x, y, button="left"):
         elif HAS_PYNPUT and mouse_ctrl:
             mouse_ctrl.position = (cx, cy)
             p_btn = Button.left if clean_btn == "left" else (Button.right if clean_btn == "right" else Button.middle)
+            mouse_ctrl.click(p_btn)
+        elif HAS_XDOTOOL:
+            btn_num = "1" if clean_btn == "left" else ("3" if clean_btn == "right" else "2")
+            subprocess.run(["xdotool", "mousemove", str(cx), str(cy), "click", btn_num], check=True, timeout=2.0)
+        else:
+            return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"x": cx, "y": cy, "button": clean_btn}
     except Exception as e:
         return f"Error clicking mouse: {str(e)}"
@@ -374,6 +415,8 @@ def double_click(x, y):
         elif HAS_PYNPUT and mouse_ctrl:
             mouse_ctrl.position = (cx, cy)
             mouse_ctrl.click(Button.left, 2)
+        elif HAS_XDOTOOL:
+            subprocess.run(["xdotool", "mousemove", str(cx), str(cy), "click", "--repeat", "2", "--delay", "50", "1"], check=True, timeout=2.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"x": cx, "y": cy, "action": "double_click"}
@@ -395,6 +438,10 @@ def scroll(amount):
             pyautogui.scroll(bounded_val)
         elif HAS_PYNPUT and mouse_ctrl:
             mouse_ctrl.scroll(0, bounded_val)
+        elif HAS_XDOTOOL:
+            btn = "4" if bounded_val > 0 else "5"
+            clicks = min(abs(bounded_val), 10)
+            subprocess.run(["xdotool", "click", "--repeat", str(clicks), btn], check=True, timeout=2.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"amount": bounded_val}
@@ -422,6 +469,8 @@ def type_text(text):
             pyautogui.typewrite(text)
         elif HAS_PYNPUT and key_ctrl:
             key_ctrl.type(text)
+        elif HAS_XDOTOOL:
+            subprocess.run(["xdotool", "type", "--clearmodifiers", "--", text], check=True, timeout=5.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"typed_chars": len(text)}
@@ -540,6 +589,9 @@ def press_key(key):
         elif HAS_PYNPUT and key_ctrl:
             k_obj = PYNPUT_KEY_MAP.get(clean_key, clean_key)
             key_ctrl.tap(k_obj)
+        elif HAS_XDOTOOL:
+            x_key = XDOTOOL_KEY_MAP.get(clean_key, clean_key)
+            subprocess.run(["xdotool", "key", "--clearmodifiers", x_key], check=True, timeout=2.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"key": clean_key}
@@ -569,6 +621,9 @@ def hotkey(keys):
                 key_ctrl.press(k)
             for k in reversed(k_objs):
                 key_ctrl.release(k)
+        elif HAS_XDOTOOL:
+            x_keys = "+".join([XDOTOOL_KEY_MAP.get(k, k) for k in clean_keys])
+            subprocess.run(["xdotool", "key", "--clearmodifiers", x_keys], check=True, timeout=2.0)
         else:
             return "Error: Desktop input library (pyautogui/pynput) is not available."
         return {"hotkey": clean_keys}

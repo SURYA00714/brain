@@ -236,6 +236,8 @@ def try_deterministic_math_or_logic(query: str) -> Optional[Dict[str, Any]]:
     if m_expr:
         expr_str = m_expr.group(1).strip()
         if any(op in expr_str for op in ("+", "-", "*", "/", "^", "%")):
+            if re.search(r"/\s*0(?:\.0+)?(?!\d)", expr_str):
+                return {"solved": True, "answer": "Error: Division by zero is undefined.", "method": "deterministic_ast_math", "confidence": 1.0}
             val = safe_eval_arithmetic(expr_str)
             if val is not None:
                 ans = int(val) if val.is_integer() else val

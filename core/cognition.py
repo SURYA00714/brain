@@ -1275,7 +1275,9 @@ def verify_step_execution(tool_name: str, arguments: Dict[str, Any], result: Dic
     if tool_upper in ("LIST_FILES", "FIND_FILES"):
         if isinstance(data, list):
             return True, "VERIFIED", f"File list verified with {len(data)} items."
-        return False, "FAILED", "File listing did not return a valid list."
+        if isinstance(data, str) and not data.startswith("Error:") and not data.startswith("Access Denied:"):
+            return True, "VERIFIED", "File listing outcome verified."
+        return False, "FAILED", f"File listing failed: {data}"
 
     if tool_upper == "READ_TEXT_FILE":
         if data is not None:

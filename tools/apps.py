@@ -227,11 +227,33 @@ class AppTracker:
                 except Exception:
                     pass
 
+            if not proc and not pid:
+                # Attached window instance
+                if not os.environ.get("BRAIN_MOCK_GUI"):
+                    try:
+                        term = app_map.get(clean_name, clean_name.title())
+                        subprocess.run(["wmctrl", "-c", term], capture_output=True, timeout=2)
+                    except Exception:
+                        pass
+                terminated = True
+
             if terminated:
                 closed_count += 1
                 entry["process_alive"] = False
             else:
                 remaining.append(entry)
+
+        # Fallback: If window remains open after process signal (common for daemon/client apps like Thunar or xfce4-terminal)
+        if not os.environ.get("BRAIN_MOCK_GUI") and is_window_open(clean_name):
+            try:
+                term = app_map.get(clean_name, clean_name.title())
+                subprocess.run(["wmctrl", "-c", term], capture_output=True, timeout=2)
+            except Exception:
+                pass
+            try:
+                subprocess.run(["xdotool", "search", "--onlyvisible", "--class", clean_name, "windowclose"], capture_output=True, timeout=2)
+            except Exception:
+                pass
 
         self._tracked_apps[clean_name] = remaining
 
@@ -341,6 +363,7 @@ def open_app(app_name):
     # Situational Awareness check: if already running, focus and report ready rather than spawning redundant process
     if default_app_tracker.is_running(clean_name) or (not os.environ.get("BRAIN_MOCK_GUI") and is_window_open(clean_name)):
         focus_app(clean_name)
+        default_app_tracker.record_launch(clean_name, "existing_instance", None)
         return f"Application '{clean_name}' is already running and focused (opened successfully)."
 
     executables = APPROVED_APPS[clean_name]

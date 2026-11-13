@@ -337,3 +337,21 @@
   - Added `what is cpu usage`, `check cpu`, and `ram usage` directly into `CPU_STATUS` and `MEMORY_STATUS` fast routing.
 - **Verification**:
   - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (64.73s).
+
+### Phase 3.4 — Linux Desktop Automation, Window Lifecycle & Deterministic Zero-Division Hardening (2026-11-13)
+- **Linux X11 Desktop Input Engine**:
+  - Integrated native `/usr/bin/xdotool` fallback into `tools/input.py` for `type_text`, `press_key`, `hotkey`, `move_mouse`, `click_mouse`, `double_click`, and `scroll`.
+  - Resolves typing failures in browser/terminal when `pyautogui` or `pynput` are not installed in the Python environment.
+- **`LIST_FILES` and `FIND_FILES` Contract Alignment**:
+  - Updated `verify_step_execution()` in `core/cognition.py` to accept string directory formatting from `tools/files.py:list_files`.
+  - Fixes plan verification failure when listing or searching directory items.
+- **Desktop Window Lifecycle & Process Detachment Management**:
+  - In `tools/apps.py`, augmented `close_app()` with window manager closure via `wmctrl -c` and `xdotool windowclose` to gracefully close daemon/client applications (`xfce4-terminal`, `thunar`, `gnome-calculator`) whose child processes detach immediately after launch.
+  - Added situational awareness tracking in `open_app()` so existing attached instances are tracked and eligible for closure on user request.
+- **Deterministic Division-by-Zero Protection**:
+  - Updated `core/math_logic.py:try_deterministic_math_or_logic` to catch division-by-zero expressions (`calculate 50 / 0`) and return `"Error: Division by zero is undefined."` deterministically in $<1$ms without invoking the LLM or spawning terminal/calculator apps.
+- **Pre-Routing Expansion**:
+  - Added regex pre-routing in `tools/router.py` for `read [text ]file <filepath>` dispatching to `READ_TEXT_FILE`, and `list files in <dir>` dispatching to `LIST_FILES`.
+  - Enhanced compound request handling (`open terminal and check disk space and close it`) to properly append `CLOSE_APP` steps.
+- **Verification**:
+  - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (53.14s).
