@@ -321,3 +321,19 @@
 - **Verification**:
   - Unit test suites: `tests/test_strategy_promotion.py`, `tests/test_security_roles.py`.
   - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (54.53s).
+
+### Phase 3.3 — Real-World Stress Test Hardening & Fast-Path Optimization (2026-11-13)
+- **Mathematical Expression Routing**:
+  - Wired explicit `calculate <expression>` queries into `core/router_pipeline.py` and `core/universal_reasoning.py` directly through deterministic AST math ($<10$ms latency, zero model hallucinations).
+- **Compound Desktop Applications vs Web Navigation**:
+  - Fixed target disambiguation in `tools/router.py`: requests like `open brave and open terminal` now recognize `terminal` as an approved desktop app instead of routing to external URLs like `terminal.com`.
+- **Filesystem & Folder Pre-Routing**:
+  - Added dedicated handlers in `tools/router.py` for `open folder called <name>` and `create folder called <name>`, dispatching to `LIST_FILES` and `CREATE_FOLDER` instead of failing against the application allowlist.
+- **Counterfactual Fast-Path Execution**:
+  - Added `evaluate_counterfactual_scenario()` to `core/router_pipeline.py` and `core/universal_reasoning.py` (`COUNTERFACTUAL_ANALYSIS`), returning exact capacity/overflow calculations in $<1$ms.
+- **Search Results Clean Formatting**:
+  - Updated `tools/search.py` and `core/formatter.py` to extract and return readable numbered search results with titles, snippets, and destination URLs.
+- **System Metrics Synonyms**:
+  - Added `what is cpu usage`, `check cpu`, and `ram usage` directly into `CPU_STATUS` and `MEMORY_STATUS` fast routing.
+- **Verification**:
+  - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (64.73s).

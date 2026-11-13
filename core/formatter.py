@@ -86,10 +86,12 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
         return f"Here are the file results: {json.dumps(result.get('data'))}"
 
     if tool_upper in ("WEB_SEARCH", "BROWSER_SEARCH"):
-        search_data = result.get("data") or result.get("results")
-        if isinstance(search_data, list):
+        raw_res = result.get("data") or result.get("results")
+        if isinstance(raw_res, dict) and "results" in raw_res:
+            raw_res = raw_res["results"]
+        if isinstance(raw_res, list):
             bullet_pts = []
-            for item in search_data[:5]:
+            for item in raw_res[:5]:
                 if isinstance(item, dict):
                     title = item.get("title", "")
                     snip = item.get("snippet", "")
@@ -97,7 +99,9 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
                 else:
                     bullet_pts.append(f"- {item}")
             return "Search results:\n" + "\n".join(bullet_pts)
-        return f"Search results:\n{search_data}"
+        if isinstance(raw_res, str) and raw_res.startswith("Search results for"):
+            return raw_res
+        return f"Search results:\n{raw_res}"
 
     if tool_upper == "CHECK_DISK_SPACE":
         return str(result.get("data") or "Disk space checked successfully.")

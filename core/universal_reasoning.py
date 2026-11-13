@@ -14,7 +14,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from models.universal_adapter import UniversalModelAdapter
 from models.capability_profiler import ModelCapabilityProfiler, ModelCapabilityProfile
-from core.math_logic import try_deterministic_math_or_logic
+from core.math_logic import try_deterministic_math_or_logic, evaluate_counterfactual_scenario
 from core.reasoning import (
     ReasoningStrategy,
     DeepReasoningEngine,
@@ -39,6 +39,7 @@ class UniversalStrategy(Enum):
     MATHEMATICAL_VERIFICATION = "MATHEMATICAL_VERIFICATION"
     ALTERNATIVE_COMPARISON = "ALTERNATIVE_COMPARISON"
     UNCERTAINTY_ANALYSIS = "UNCERTAINTY_ANALYSIS"
+    COUNTERFACTUAL_ANALYSIS = "COUNTERFACTUAL_ANALYSIS"
 
 
 class ExecutionMode(Enum):
@@ -99,6 +100,12 @@ class UniversalReasoningOrchestrator:
         if any(w in p_lower for w in ["exact price in 203", "will happen in 20", "predict the future", "what happens in 203"]):
             return UniversalStrategy.UNCERTAINTY_ANALYSIS
 
+        # 1b. Counterfactual Speculation ("what if X increased/changed on Y")
+        if any(k in p_lower for k in ("what if", "suppose", "assuming")):
+            cf_test = evaluate_counterfactual_scenario(prompt)
+            if cf_test.get("valid"):
+                return UniversalStrategy.COUNTERFACTUAL_ANALYSIS
+
         # 2. Mathematical Verification: arithmetic, sequence, conversion
         math_keywords = ["+", "-", "*", "/", "sum", "product", "calculate", "average", "sequence", "convert", "laptops", "apples"]
         if any(k in p_lower for k in math_keywords) and any(c.isdigit() for c in prompt):
@@ -148,8 +155,8 @@ class UniversalReasoningOrchestrator:
         p_lower = prompt.lower()
         strat = strategy or self.select_strategy(prompt, profile)
 
-        # 1. VERIFIED MODE: Strict math, constraints, tools
-        if strat in (UniversalStrategy.MATHEMATICAL_VERIFICATION, UniversalStrategy.CONSTRAINT_BASED_REASONING, UniversalStrategy.TOOL_ASSISTED_REASONING):
+        # 1. VERIFIED MODE: Strict math, constraints, tools, counterfactual bounds
+        if strat in (UniversalStrategy.MATHEMATICAL_VERIFICATION, UniversalStrategy.CONSTRAINT_BASED_REASONING, UniversalStrategy.TOOL_ASSISTED_REASONING, UniversalStrategy.COUNTERFACTUAL_ANALYSIS):
             return ExecutionMode.VERIFIED
 
         # 2. DIRECT MODE: Tasks where wrapping/scaffolding causes false rejections or reasoning degradation
@@ -203,6 +210,23 @@ class UniversalReasoningOrchestrator:
 
         # === 1. VERIFIED MODE ===
         if mode == ExecutionMode.VERIFIED:
+            if strategy == UniversalStrategy.COUNTERFACTUAL_ANALYSIS:
+                cf_result = evaluate_counterfactual_scenario(prompt)
+                if cf_result.get("valid") and "conclusion" in cf_result:
+                    dur_ms = (time.perf_counter() - start) * 1000.0
+                    return UniversalReasoningResult(
+                        text=cf_result["conclusion"],
+                        strategy=strategy.value,
+                        model_id=target_model,
+                        duration_ms=dur_ms,
+                        execution_path="DETERMINISTIC_FAST_PATH",
+                        verified=True,
+                        confidence=1.0,
+                        mode=mode.value,
+                        execution_mode=mode.value,
+                        metadata={"solver": "counterfactual_evaluator"},
+                    )
+
             if strategy == UniversalStrategy.MATHEMATICAL_VERIFICATION:
                 det_result = try_deterministic_math_or_logic(prompt)
                 if det_result and det_result.get("solved"):

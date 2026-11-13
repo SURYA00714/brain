@@ -205,6 +205,11 @@ def perform_web_search(query, max_results=3):
         return f"No valid web search results found for '{query}'."
 
     formatted_output = [f"Search results for '{query}':"]
+    for idx, r in enumerate(results[:max_results], 1):
+        title = r.get("title", "")
+        snip = r.get("snippet", "")
+        url = r.get("url", "")
+        formatted_output.append(f"{idx}. {title}\n   {snip}\n   URL: {url}")
     return "\n\n".join(formatted_output)
 
 

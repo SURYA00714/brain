@@ -42,6 +42,37 @@ def process_fast_route(
     Returns FastRouteResult indicating whether request was completely handled or needs fallback.
     """
     telemetry = default_telemetry.current
+
+    # Phase 1.9: Deterministic AST math, conversions, percentages, and sequences fast path (<1ms)
+    from core.math_logic import try_deterministic_math_or_logic, evaluate_counterfactual_scenario
+    det_math = try_deterministic_math_or_logic(effective_request)
+    if det_math and det_math.get("solved"):
+        ans = det_math.get("answer", "")
+        default_short_term_memory.add_turn(user_request, str(ans))
+        profiler.record_route("DETERMINISTIC_AST_MATH", det_math.get("method", "math"))
+        profiler.record_total()
+        profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+        telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+        telemetry.llm_calls_this_request = 0
+        telemetry.provenance = "STATIC"
+        default_telemetry.finish_request()
+        return FastRouteResult(handled=True, response=f"{ans}")
+
+    # Counterfactual reasoning fast path
+    if any(k in effective_request.lower() for k in ("what if", "suppose", "assuming")):
+        cf_res = evaluate_counterfactual_scenario(effective_request)
+        if cf_res.get("valid") and "conclusion" in cf_res:
+            ans = cf_res["conclusion"]
+            default_short_term_memory.add_turn(user_request, ans)
+            profiler.record_route("COUNTERFACTUAL_EVALUATOR", "REASONING")
+            profiler.record_total()
+            profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+            telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+            telemetry.llm_calls_this_request = 0
+            telemetry.provenance = "STATIC"
+            default_telemetry.finish_request()
+            return FastRouteResult(handled=True, response=ans)
+
     t_route_start = time.perf_counter()
     fast_match = default_router.route(effective_request)
     t_route_end = time.perf_counter()

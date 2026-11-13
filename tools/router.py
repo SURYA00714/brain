@@ -445,7 +445,16 @@ class FastRouter:
         open_nav_match = re.match(r"^(?:open|launch|start)\s+(?:brave|browser)\s+(?:and|,)?\s*(?:go to|navigate to|open|visit)\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if open_nav_match:
             raw_target = open_nav_match.group(1).strip()
-            if raw_target and raw_target not in {"new tab", "a new tab", "tab"}:
+            from tools.apps import normalize_app_name, APPROVED_APPS
+            norm_sub_app = normalize_app_name(raw_target)
+            if norm_sub_app in APPROVED_APPS and norm_sub_app != "brave":
+                # User asked to open two distinct desktop applications: e.g. "open brave and open terminal"
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="OPEN_APP", arguments={"app_name": norm_sub_app}, expected_outcome=f"{norm_sub_app} open", description=f"Open {norm_sub_app}"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer=f"Opened Brave and {norm_sub_app}."))
+                return {"type": "plan", "plan": plan}
+            elif raw_target and raw_target not in {"new tab", "a new tab", "tab"}:
                 common_sites = {
                     "wikipedia": "https://www.wikipedia.org",
                     "youtube": "https://www.youtube.com",
@@ -569,6 +578,18 @@ class FastRouter:
         if norm_text in list_apps_queries or clean_norm in list_apps_queries:
             return {"type": "tool", "tool": "LIST_APPS", "arguments": {}}
 
+        # 3. Dedicated Pre-Router for Filesystem and Folder Operations (before App Launch)
+        folder_open_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|show|list)\s+(?:the\s+)?(?:folder|directory)\s*(?:called\s+|named\s+)?(.+)$", norm_text, flags=re.IGNORECASE)
+        if folder_open_match:
+            f_target = folder_open_match.group(1).strip()
+            if f_target:
+                return {"type": "tool", "tool": "LIST_FILES", "arguments": {"target_path": f_target}}
+
+        folder_create_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:create|make|mkdir)\s+(?:a\s+)?(?:folder|directory)(?:\s+(?:called|named))?\s*(.*)$", norm_text, flags=re.IGNORECASE)
+        if folder_create_match:
+            f_name = folder_create_match.group(1).strip() or "new_folder"
+            return {"type": "tool", "tool": "CREATE_FOLDER", "arguments": {"folder_name": f_name}}
+
         # 4. Simple Single-Intent App Launch & System Requests
         # Strictly match simple single-intent requests, NOT multi-step compound requests ("open brave and search...")
         if " and " not in norm_text and " then " not in norm_text and "," not in norm_text and not re.search(r"[;&|`$]", norm_text):
@@ -684,12 +705,10 @@ class FastRouter:
             # System Information & Metrics
             if norm_text in {"system info", "show system info", "system information", "show system information", "system status"}:
                 return {"type": "tool", "tool": "SYSTEM_INFO", "arguments": {}}
-            if norm_text in {"memory status", "show memory status", "show memory", "memory info"}:
-                return {"type": "tool", "tool": "MEMORY_STATUS", "arguments": {}}
-            if norm_text in {"disk status", "show disk status", "show disk", "disk info"}:
-                return {"type": "tool", "tool": "DISK_STATUS", "arguments": {}}
-            if norm_text in {"cpu status", "show cpu status", "show cpu", "cpu info", "cpu usage"}:
+            if norm_text in {"cpu status", "show cpu status", "show cpu", "cpu info", "cpu usage", "what is cpu usage", "what is the cpu usage", "what is my cpu usage", "get cpu usage", "check cpu usage", "check cpu"}:
                 return {"type": "tool", "tool": "CPU_STATUS", "arguments": {}}
+            if norm_text in {"memory status", "show memory status", "show memory", "memory info", "ram usage", "what is ram usage", "check ram", "ram status"}:
+                return {"type": "tool", "tool": "MEMORY_STATUS", "arguments": {}}
 
             # Disruptive Operations (Confirmation Gated)
             if norm_text in {"shutdown", "shutdown computer", "turn off computer", "power off", "shutdown system", "turn off pc"}:
