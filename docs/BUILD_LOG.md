@@ -369,6 +369,9 @@
   - Registered `READ_WEB_PAGE` and `DEEP_RESEARCH` in `tools/registry.py` with parameter schemas.
   - Added direct URL pre-routing in `tools/router.py` (`read page <url>`) and deep research pre-routing (`deep research <topic>`), while strictly preserving semantic boundary routing for open-ended queries.
   - Added output formatting in `core/formatter.py` and step evidence verification in `core/cognition.py`.
+- **Deterministic Internet Capability Inquiries & Grounded Prompting**:
+  - Added deterministic capability routing in `tools/router.py` for queries like `do you have live internet access` and `can you web search`, directly confirming tools (`WEB_SEARCH`, `READ_WEB_PAGE`, `DEEP_RESEARCH`) in $<1$ms without model hallucinations.
+  - Updated direct conversational system prompt in `core/universal_reasoning.py` to anchor raw LLM responses to Brain's actual PC and live internet capabilities.
 - **Verification**:
-  - New test suite: `tests/test_phase3_5_real_internet.py` (7/7 tests passing).
-  - Full automated regression suite: **748 tests executed: 747 passed, 1 skipped, 0 failures, 0 errors** (55.59s).
+  - Test suite: `tests/test_phase3_5_real_internet.py` (8/8 tests passing).
+  - Full automated regression suite: **749 tests executed: 748 passed, 1 skipped, 0 failures, 0 errors** (58.70s).

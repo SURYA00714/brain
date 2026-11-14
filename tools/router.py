@@ -38,6 +38,19 @@ class FastRouter:
             return {"type": "final", "answer": "Goodbye! Brain is standing by whenever you need assistance."}
 
         # 1b. Deterministic Identity & Capabilities (NO LLM, NO WEB SEARCH)
+        internet_match = re.search(
+            r"\b(?:do\s+you\s+have|can\s+you\s+access|are\s+you\s+connected\s+to|have\s+you\s+got)\s+(?:the\s+|live\s+)?internet\s*(?:acces+)?\b|"
+            r"\b(?:can\s+you|do\s+you)\s+(?:perform\s+|do\s+)?(?:a\s+)?(?:web\s*search|search\s+the\s+web|browse\s+the\s+web|search\s+online)\b|"
+            r"^(?:can\s+you\s+)?(?:web\s*search|search\s+web|browse\s+web|read\s+webpages?|fetch\s+urls?)\??$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if internet_match:
+            return {
+                "type": "final",
+                "answer": "Yes. I have live internet access and can perform real-time web searches, fetch and read web pages, and conduct deep multi-source research using tools like WEB_SEARCH, READ_WEB_PAGE, and DEEP_RESEARCH."
+            }
+
         identity_queries = {
             "who are you", "who are you?", "what are you", "what are you?",
             "what is your name", "what's your name", "who made you",

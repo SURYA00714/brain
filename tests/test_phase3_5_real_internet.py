@@ -139,6 +139,16 @@ class TestPhase35RealInternet(unittest.TestCase):
         intent2 = default_cognition.understand_intent("latest Python release date")
         self.assertEqual(intent2.get("intent"), "RESEARCH")
 
+    def test_08_internet_capability_inquiries(self):
+        # Direct capability questions confirm live internet and web search capability
+        ans1 = _raw_run_planner_task("do you have live internet acces", quiet=True)
+        self.assertIn("live internet access", ans1)
+        self.assertIn("WEB_SEARCH", ans1)
+
+        ans2 = _raw_run_planner_task("can you web search", quiet=True)
+        self.assertIn("live internet access", ans2)
+        self.assertIn("WEB_SEARCH", ans2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -301,9 +301,15 @@ class UniversalReasoningOrchestrator:
 
         # === 2. DIRECT MODE ===
         if mode == ExecutionMode.DIRECT:
+            default_sys = (
+                "You are Brain, an autonomous personal AI assistant with full PC operating capabilities "
+                "and live internet access. You can perform live web searches, fetch and read web pages, "
+                "launch and control desktop applications, and manage files. "
+                "Provide a clear, accurate, concise, and helpful response grounded in your actual capabilities."
+            )
             resp = self.adapter.generate(
                 prompt=effective_prompt,
-                system_prompt=system_prompt or "Provide a clear, accurate, and direct response. Pay close attention to recent conversation context.",
+                system_prompt=system_prompt or default_sys,
                 model_id=target_model,
                 temperature=0.1,
                 num_predict=150,

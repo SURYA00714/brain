@@ -7,8 +7,9 @@
 - **Deep Multi-Source Web Research Loop** ([`tools/search.py`](file:///home/jai/Downloads/Brain/tools/search.py)): Upgraded `research_topic()` with full-cycle deep research: queries DuckDuckGo, deep-fetches top source articles, extracts key paragraphs matching query terms, and cross-references findings across domains.
 - **Model-Independent Grounded Synthesis** ([`core/cognition.py`](file:///home/jai/Downloads/Brain/core/cognition.py)): Research synthesis uses `tier="AUTO"` so local Ollama or Cloud models generate concise, verified summaries directly from live internet evidence.
 - **System Tool Registration & Fast Routing** ([`tools/registry.py`](file:///home/jai/Downloads/Brain/tools/registry.py), [`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)): Registered `READ_WEB_PAGE` and `DEEP_RESEARCH`. Added pre-routing for direct URL reading (`read page <url>`) and deep research while preserving semantic boundary protection for open-ended queries.
-- **Unit & Regression Test Suites (VERIFIED — 748/748 Tests Passing)**:
-  - 747 passed, 1 skipped, 0 failures, 0 errors in 55.59s.
+- **Deterministic Internet Capability Inquiries** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py), [`core/universal_reasoning.py`](file:///home/jai/Downloads/Brain/core/universal_reasoning.py)): Fast-routes capability queries (`can you web search`, `do you have live internet access`) and grounds direct LLM prompts to prevent default pretraining hallucinations.
+- **Unit & Regression Test Suites (VERIFIED — 749/749 Tests Passing)**:
+  - 748 passed, 1 skipped, 0 failures, 0 errors in 58.70s.
 
 ## Previous Phase: Phase 3.4 — Linux Desktop Automation, Window Lifecycle & Deterministic Zero-Division Hardening (Completed & Verified)
 
