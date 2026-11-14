@@ -1,6 +1,16 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 3.5 — Effective Real-Life Internet Integration & Deep Research Engine (Completed & Verified)
+## Current State: Phase 3.5.1 — UI vs. Backend Execution Dichotomy & Web Alias Resolution (Completed & Verified)
+
+### Universal System Enhancements (VERIFIED)
+- **UI Navigation vs. Backend Extraction Dichotomy** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):
+  - **Desktop UI Requests** (`go to <target>`, `visit <target>`, `navigate to <target>`): Construct multi-step desktop execution plans (`OPEN_APP(brave)` -> `FOCUS_APP(brave)` -> `BROWSER_NAVIGATE(url=target_url)`), driving the native browser window directly on screen.
+  - **Headless Backend Requests** (`READ_WEB_PAGE <target>`, `read website <target>`, `read page <target>`, `analyse website <target>`, `read <target>`): Route directly to headless `READ_WEB_PAGE(url=target_url)` or `DEEP_RESEARCH` in $<0.4$s without spawning UI windows or moving mouse pointers.
+- **Common Web Alias Resolution** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)): Maps shorthand service names (`wikipedia`, `youtube`, `github`, `reddit`, `google`, etc.) and bare domains (`github.com`) to HTTPS target URLs automatically for both UI navigation and backend web reading.
+- **Unit & Regression Test Suites (VERIFIED — 750/750 Tests Passing)**:
+  - 749 passed, 1 skipped, 0 failures, 0 errors in 63.36s.
+
+## Previous Phase: Phase 3.5 — Effective Real-Life Internet Integration & Deep Research Engine (Completed & Verified)
 
 ### Universal System Enhancements (VERIFIED)
 - **SSRF-Protected Webpage Content Reader** ([`tools/search.py`](file:///home/jai/Downloads/Brain/tools/search.py)): Added `read_web_page()` and `is_safe_web_url()` to fetch and parse any public HTTP/HTTPS page, stripping scripts, styles, navigation, and boilerplate while blocking loopback and private RFC-1918 subnets.

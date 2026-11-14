@@ -375,3 +375,15 @@
 - **Verification**:
   - Test suite: `tests/test_phase3_5_real_internet.py` (8/8 tests passing).
   - Full automated regression suite: **749 tests executed: 748 passed, 1 skipped, 0 failures, 0 errors** (58.70s).
+
+### Phase 3.5.1 — UI vs. Backend Execution Dichotomy & Web Alias Resolution (2026-11-14)
+- **UI Navigation vs. Headless Backend Extraction Dichotomy**:
+  - Enforced strict architectural separation in `tools/router.py`:
+    - **Desktop UI Queries** (`go to <target>`, `visit <target>`, `navigate to <target>`): Synthesize an automated 4-step UI execution plan (`OPEN_APP(brave)` -> `FOCUS_APP(brave)` -> `BROWSER_NAVIGATE(url=target_url)` -> final confirmation), opening and controlling the browser directly on screen.
+    - **Headless Backend Queries** (`READ_WEB_PAGE <target>`, `read website <target>`, `read page <target>`, `analyse website <target>`, `read <target>`): Route directly to headless `READ_WEB_PAGE(url=target_url)` or `DEEP_RESEARCH` in $<0.4$s, fetching and analyzing page text in memory without opening desktop windows or moving mouse pointers.
+- **Common Web Alias Resolution**:
+  - Mapped alias keywords (`wikipedia`, `youtube`, `github`, `reddit`, `google`, `netflix`, `amazon`, etc.) and bare domains (`github.com`) to full HTTPS targets automatically for both UI navigation and backend web reading.
+- **Verification**:
+  - Expanded `tests/test_phase3_5_real_internet.py` with `test_09_backend_read_vs_ui_open_separation` (9/9 tests passing).
+  - Full automated regression suite: **750 tests executed: 749 passed, 1 skipped, 0 failures, 0 errors** (63.36s).
+

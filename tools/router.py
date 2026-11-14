@@ -494,6 +494,36 @@ class FastRouter:
                 plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
                 return {"type": "plan", "plan": plan}
 
+        # 3a-4. Direct UI Browser Navigation: "go to <target>", "visit <target>", "navigate to <target>"
+        nav_direct_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:go to|navigate to|visit|browse to)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if nav_direct_match:
+            raw_target = nav_direct_match.group(1).strip()
+            common_sites = {
+                "wikipedia": "https://www.wikipedia.org",
+                "youtube": "https://www.youtube.com",
+                "google": "https://www.google.com",
+                "github": "https://www.github.com",
+                "reddit": "https://www.reddit.com",
+                "twitter": "https://www.twitter.com",
+                "x": "https://www.x.com",
+                "netflix": "https://www.netflix.com",
+                "amazon": "https://www.amazon.com",
+            }
+            c_low = raw_target.lower()
+            if c_low in common_sites:
+                target_url = common_sites[c_low]
+            elif "." in raw_target:
+                target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
+            else:
+                target_url = f"https://www.{raw_target}.com"
+
+            plan = ExecutionPlan(goal=clean_text)
+            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
+            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
+            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+            plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
+            return {"type": "plan", "plan": plan}
+
         # 3a. Open Brave and search for X [optional: then tell me what you see]
         for prefix in [
             "open brave and search for ", "open brave and search ",
@@ -597,6 +627,42 @@ class FastRouter:
         url_match = re.search(r"https?://[^\s<>\"']+", clean_text)
         if url_match and any(k in norm_text for k in ("read", "view", "fetch", "extract", "summarize", "page", "website", "article", "url", "what is on")):
             return {"type": "tool", "tool": "READ_WEB_PAGE", "arguments": {"url": url_match.group(0)}}
+
+        common_web_sites = {
+            "wikipedia": "https://www.wikipedia.org",
+            "youtube": "https://www.youtube.com",
+            "google": "https://www.google.com",
+            "github": "https://www.github.com",
+            "reddit": "https://www.reddit.com",
+            "twitter": "https://www.twitter.com",
+            "x": "https://www.x.com",
+            "netflix": "https://www.netflix.com",
+            "amazon": "https://www.amazon.com",
+        }
+
+        read_web_match = re.match(
+            r"^(?:can you\s+|could you\s+|please\s+)?(?:read_web_page|read\s+web\s*page|read\s+website|read\s+page|fetch\s+page|fetch\s+url|read\s+url|analyse\s+website|analyze\s+website|read\s+site)\s+(.+)$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if not read_web_match:
+            # Also catch direct "read wikipedia", "analyse wikipedia"
+            read_web_match = re.match(
+                r"^(?:can you\s+|could you\s+|please\s+)?(?:read|analyse|analyze)\s+(wikipedia|youtube|google|github|reddit|twitter|netflix|amazon)$",
+                norm_text,
+                flags=re.IGNORECASE
+            )
+
+        if read_web_match:
+            raw_target = read_web_match.group(1).strip()
+            c_low = raw_target.lower()
+            if c_low in common_web_sites:
+                target_url = common_web_sites[c_low]
+            elif "." in raw_target:
+                target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
+            else:
+                target_url = f"https://www.{raw_target}.org" if raw_target == "wikipedia" else f"https://www.{raw_target}.com"
+            return {"type": "tool", "tool": "READ_WEB_PAGE", "arguments": {"url": target_url}}
 
         research_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:do\s+a\s+)?deep\s+research(?:\s+(?:on|about|for))?\s*(.+)$", norm_text, flags=re.IGNORECASE)
         if research_match:

@@ -149,6 +149,38 @@ class TestPhase35RealInternet(unittest.TestCase):
         self.assertIn("live internet access", ans2)
         self.assertIn("WEB_SEARCH", ans2)
 
+    def test_09_backend_read_vs_ui_open_separation(self):
+        # 1. User says "go to youtube.com" -> UI navigation plan (open brave + navigate)
+        ui_res = default_router.route("go to youtube.com")
+        self.assertIsNotNone(ui_res)
+        self.assertEqual(ui_res.get("type"), "plan")
+        plan_steps = ui_res["plan"].steps
+        tool_names = [s.tool_name for s in plan_steps if s.action_type == "tool"]
+        self.assertIn("OPEN_APP", tool_names)
+        self.assertIn("BROWSER_NAVIGATE", tool_names)
+
+        # 2. User says "READ_WEB_PAGE wikipedia" -> Backend tool READ_WEB_PAGE (headless)
+        be_res1 = default_router.route("READ_WEB_PAGE wikipedia")
+        self.assertIsNotNone(be_res1)
+        self.assertEqual(be_res1.get("type"), "tool")
+        self.assertEqual(be_res1.get("tool"), "READ_WEB_PAGE")
+        self.assertEqual(be_res1.get("arguments", {}).get("url"), "https://www.wikipedia.org")
+
+        # 3. User says "read wikipedia" -> Backend tool READ_WEB_PAGE
+        be_res2 = default_router.route("read wikipedia")
+        self.assertIsNotNone(be_res2)
+        self.assertEqual(be_res2.get("type"), "tool")
+        self.assertEqual(be_res2.get("tool"), "READ_WEB_PAGE")
+        self.assertEqual(be_res2.get("arguments", {}).get("url"), "https://www.wikipedia.org")
+
+        # 4. User says "read website github.com" -> Backend tool READ_WEB_PAGE
+        be_res3 = default_router.route("read website github.com")
+        self.assertIsNotNone(be_res3)
+        self.assertEqual(be_res3.get("type"), "tool")
+        self.assertEqual(be_res3.get("tool"), "READ_WEB_PAGE")
+        self.assertEqual(be_res3.get("arguments", {}).get("url"), "https://github.com")
+
+
 
 if __name__ == "__main__":
     unittest.main()
