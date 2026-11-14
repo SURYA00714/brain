@@ -435,6 +435,68 @@ class FastRouter:
         # Check compound workflows BEFORE semantic triggers to build fast ExecutionPlans without LLM
         from tools.plan import ExecutionPlan, ExecutionStep
 
+        # 3a-00. Specific Website Search Workflow: e.g. "open youtube and search gemini"
+        site_search_urls = {
+            "youtube": "https://www.youtube.com/results?search_query={query}",
+            "google": "https://www.google.com/search?q={query}",
+            "github": "https://github.com/search?q={query}",
+            "wikipedia": "https://en.wikipedia.org/wiki/Special:Search?search={query}",
+            "reddit": "https://www.reddit.com/search/?q={query}",
+            "amazon": "https://www.amazon.com/s?k={query}",
+            "twitter": "https://twitter.com/search?q={query}",
+            "x": "https://x.com/search?q={query}",
+            "duckduckgo": "https://duckduckgo.com/?q={query}",
+        }
+
+        matched_site = None
+        matched_query = None
+
+        m_site1 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?open\s+([a-zA-Z0-9_\-\.]+)\s+(?:and\s+search(?:\s+for)?|search(?:\s+for)?)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if m_site1:
+            s_cand = re.sub(r"\.(com|org|net|io|co)$", "", m_site1.group(1).lower().strip())
+            if s_cand in site_search_urls and s_cand != "brave":
+                matched_site = s_cand
+                matched_query = m_site1.group(2).strip()
+
+        if not matched_site:
+            m_site2 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?search(?:\s+for)?\s+(.+?)\s+(?:on|in)\s+([a-zA-Z0-9_\-\.]+)$", norm_text, flags=re.IGNORECASE)
+            if m_site2:
+                s_cand = re.sub(r"\.(com|org|net|io|co)$", "", m_site2.group(2).lower().strip())
+                if s_cand in site_search_urls and s_cand != "brave":
+                    matched_site = s_cand
+                    matched_query = m_site2.group(1).strip()
+
+        if not matched_site:
+            m_site3 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:on|in)\s+([a-zA-Z0-9_\-\.]+)\s+search(?:\s+for)?\s+(.+)$", norm_text, flags=re.IGNORECASE)
+            if m_site3:
+                s_cand = re.sub(r"\.(com|org|net|io|co)$", "", m_site3.group(1).lower().strip())
+                if s_cand in site_search_urls and s_cand != "brave":
+                    matched_site = s_cand
+                    matched_query = m_site3.group(2).strip()
+
+        if matched_site and matched_query:
+            import urllib.parse
+            # Check for click / open first result
+            has_first = bool(re.search(r"(,\s*)?(and\s+)?(then\s+)?(open|click|play)\s+(the\s+)?(first\s+)?(result|video|link|item)", matched_query, flags=re.IGNORECASE))
+            if has_first:
+                clean_q = re.sub(r"(,\s*)?(and\s+)?(then\s+)?(open|click|play)\s+(the\s+)?(first\s+)?(result|video|link|item).*$", "", matched_query, flags=re.IGNORECASE).strip().strip(".,")
+            else:
+                clean_q = matched_query.strip().strip(".,")
+
+            if clean_q:
+                dest_url = site_search_urls[matched_site].format(query=urllib.parse.quote_plus(clean_q))
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", verification_method="app_running", description="Open Brave browser"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", verification_method="focus", description="Focus Brave window"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": dest_url, "mode": "FOREGROUND"}, expected_outcome=f"Navigated to {matched_site.capitalize()} search for '{clean_q}'", verification_method="url_or_page", description=f"Navigate to {matched_site.capitalize()} search"))
+                if has_first:
+                    plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="tool", tool_name="CLICK_FIRST_RESULT", arguments={"query": clean_q}, expected_outcome="First result clicked", verification_method="url_or_page", description="Click first search result"))
+                    plan.add_step(ExecutionStep(step_id=5, depends_on=[4], action_type="tool", tool_name="ANALYZE_SCREEN", arguments={}, expected_outcome="Landing page verified", verification_method="observation", description="Verify landing page"))
+                    plan.add_step(ExecutionStep(step_id=6, depends_on=[5], action_type="final", answer=f"Opened {matched_site.capitalize()}, searched for '{clean_q}', and opened the first result."))
+                else:
+                    plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {matched_site.capitalize()} and searched for '{clean_q}'."))
+                return {"type": "plan", "plan": plan}
+
         # 3a-0. Open Brave, open new tab and search for X [optional: and click first result]
         new_tab_search_match = re.match(
             r"^(?:open )?brave(?:,)? (?:and )?(?:open )?(?:a )?new tab (?:and )?(?:search (?:for )?|find )(.+)$",

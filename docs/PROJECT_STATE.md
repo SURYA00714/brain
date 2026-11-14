@@ -1,6 +1,17 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 3.5.2 — Desktop Browser Foreground Navigation & Domain URL Sanitization (Completed & Verified)
+## Current State: Phase 3.5.3 — In-Site Web Search Workflow & Planning Intelligence (Completed & Verified)
+
+### Universal System Enhancements (VERIFIED)
+- **Targeted In-Site Search Intent Engine** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):
+  - Implemented deterministic routing for queries targeting specific websites (`open <site> and search <query>`, `search <query> on/in <site>`, `in/on <site> search <query>`).
+  - Directly maps known content and search services (YouTube, Google, GitHub, Wikipedia, Reddit, Amazon, Twitter/X) to their exact search URL endpoints (e.g. `open youtube and search gemini` $\rightarrow$ `https://www.youtube.com/results?search_query=gemini`).
+  - Eliminates the compound planning defect where the browser opened YouTube and then executed an address bar search for "gemini", inadvertently replacing YouTube with `gemini.google.com`.
+  - Supports optional result selection chaining (`... and click/play the first result/video`).
+- **Unit & Regression Test Suites (VERIFIED — 752/752 Tests Passing)**:
+  - 751 passed, 1 skipped, 0 failures, 0 errors in 72.90s.
+
+## Previous Phase: Phase 3.5.2 — Desktop Browser Foreground Navigation & Domain URL Sanitization (Completed & Verified)
 
 ### Universal System Enhancements (VERIFIED)
 - **Desktop Browser Native IPC Navigation** ([`tools/browser.py`](file:///home/jai/Downloads/Brain/tools/browser.py)):

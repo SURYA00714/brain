@@ -190,6 +190,29 @@ class TestPhase35RealInternet(unittest.TestCase):
         self.assertEqual(nav_steps[0].arguments.get("url"), "https://www.youtube.com")
         self.assertEqual(nav_steps[0].arguments.get("mode"), "FOREGROUND")
 
+    def test_11_specific_site_search_workflow(self):
+        # 1. "open youtube and search gemini" -> navigates directly to YouTube search query
+        r1 = default_router.route("open youtube  and search gemini")
+        self.assertIsNotNone(r1)
+        self.assertEqual(r1.get("type"), "plan")
+        nav_steps = [s for s in r1["plan"].steps if s.tool_name == "BROWSER_NAVIGATE"]
+        self.assertEqual(len(nav_steps), 1)
+        self.assertEqual(nav_steps[0].arguments.get("url"), "https://www.youtube.com/results?search_query=gemini")
+        self.assertEqual(nav_steps[0].arguments.get("mode"), "FOREGROUND")
+
+        # 2. "search gemini on youtube"
+        r2 = default_router.route("search gemini on youtube")
+        self.assertIsNotNone(r2)
+        nav_steps2 = [s for s in r2["plan"].steps if s.tool_name == "BROWSER_NAVIGATE"]
+        self.assertEqual(nav_steps2[0].arguments.get("url"), "https://www.youtube.com/results?search_query=gemini")
+
+        # 3. "open github and search rust"
+        r3 = default_router.route("open github and search rust")
+        self.assertIsNotNone(r3)
+        nav_steps3 = [s for s in r3["plan"].steps if s.tool_name == "BROWSER_NAVIGATE"]
+        self.assertEqual(nav_steps3[0].arguments.get("url"), "https://github.com/search?q=rust")
+
+
 
 
 if __name__ == "__main__":

@@ -399,4 +399,16 @@
   - Expanded `tests/test_phase3_5_real_internet.py` with `test_10_desktop_browser_navigation_with_whitespace_and_foreground` (10/10 tests passing).
   - Full automated regression suite: **751 tests executed: 750 passed, 1 skipped, 0 failures, 0 errors** (63.39s).
 
+### Phase 3.5.3 — In-Site Web Search Workflow & Planning Intelligence (2026-11-14)
+- **Targeted In-Site Search Workflow**:
+  - Added deterministic in-site search workflow in `tools/router.py`:
+    - Handles intents matching `open <site> and search <query>`, `search <query> on/in <site>`, and `in/on <site> search <query>`.
+    - Automatically builds an integrated foreground navigation plan targeting the platform's native search endpoint (e.g. `open youtube and search gemini` navigates directly to `https://www.youtube.com/results?search_query=gemini`).
+    - Eliminates the compound planning bug where `open youtube and search gemini` was split into two disconnected clauses (`open youtube` followed by generic address bar `search gemini`), which inadvertently overwrote the open YouTube session with `gemini.google.com`.
+    - Supports automated first-result selection and verification (`... and click the first result` / `play the first video`).
+- **Verification**:
+  - Expanded `tests/test_phase3_5_real_internet.py` with `test_11_specific_site_search_workflow` (11/11 tests passing).
+  - Full automated regression suite: **752 tests executed: 751 passed, 1 skipped, 0 failures, 0 errors** (72.91s).
+
+
 
