@@ -178,7 +178,17 @@ class TestPhase35RealInternet(unittest.TestCase):
         self.assertIsNotNone(be_res3)
         self.assertEqual(be_res3.get("type"), "tool")
         self.assertEqual(be_res3.get("tool"), "READ_WEB_PAGE")
-        self.assertEqual(be_res3.get("arguments", {}).get("url"), "https://github.com")
+        self.assertEqual(be_res3.get("arguments", {}).get("url"), "https://www.github.com")
+
+    def test_10_desktop_browser_navigation_with_whitespace_and_foreground(self):
+        # User says "visit youtube .com" with accidental whitespace
+        ui_res = default_router.route("visit youtube .com")
+        self.assertIsNotNone(ui_res)
+        self.assertEqual(ui_res.get("type"), "plan")
+        nav_steps = [s for s in ui_res["plan"].steps if s.tool_name == "BROWSER_NAVIGATE"]
+        self.assertEqual(len(nav_steps), 1)
+        self.assertEqual(nav_steps[0].arguments.get("url"), "https://www.youtube.com")
+        self.assertEqual(nav_steps[0].arguments.get("mode"), "FOREGROUND")
 
 
 

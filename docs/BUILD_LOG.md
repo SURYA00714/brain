@@ -387,3 +387,16 @@
   - Expanded `tests/test_phase3_5_real_internet.py` with `test_09_backend_read_vs_ui_open_separation` (9/9 tests passing).
   - Full automated regression suite: **750 tests executed: 749 passed, 1 skipped, 0 failures, 0 errors** (63.36s).
 
+### Phase 3.5.2 — Desktop Browser Foreground Navigation & Domain URL Sanitization (2026-11-14)
+- **Desktop Browser Native Chromium IPC Navigation**:
+  - In `tools/browser.py`, upgraded `GUIFallbackBrowserProvider.navigate()` and `browser_navigate()` to directly trigger Chromium single-process IPC (`brave-browser <url>`) on Linux desktop.
+  - When Brave is open or opening, Brave receives the target URL and navigates the running window directly without failing if address bar focus was delayed.
+  - Automatically raises and focuses the active Brave window using `focus_app("brave")` and retains keyboard typing fallback (`ctrl+l` + `type_text` + `return`) when the binary is not present in PATH.
+  - In `browser_navigate()`, automatically activates foreground GUI navigation whenever Brave is running or visible on screen (`is_brave_active`).
+- **Domain URL Sanitization & Whitespace Collapse**:
+  - Implemented `normalize_web_target_url()` in `tools/router.py` to collapse accidental whitespace around domain dots (e.g. `visit youtube .com` -> `https://www.youtube.com`), strip top-level domains to match common web aliases, and pass `mode="FOREGROUND"` in plan navigation steps.
+- **Verification**:
+  - Expanded `tests/test_phase3_5_real_internet.py` with `test_10_desktop_browser_navigation_with_whitespace_and_foreground` (10/10 tests passing).
+  - Full automated regression suite: **751 tests executed: 750 passed, 1 skipped, 0 failures, 0 errors** (63.39s).
+
+

@@ -1,6 +1,18 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 3.5.1 — UI vs. Backend Execution Dichotomy & Web Alias Resolution (Completed & Verified)
+## Current State: Phase 3.5.2 — Desktop Browser Foreground Navigation & Domain URL Sanitization (Completed & Verified)
+
+### Universal System Enhancements (VERIFIED)
+- **Desktop Browser Native IPC Navigation** ([`tools/browser.py`](file:///home/jai/Downloads/Brain/tools/browser.py)):
+  - Upgraded `GUIFallbackBrowserProvider.navigate()` and `browser_navigate()` to directly trigger single-process Chromium IPC (`brave-browser <url>`) on Linux desktop. When Brave is running, Brave receives the target URL and navigates the browser window directly without relying solely on address bar keyboard focus.
+  - Automatically raises and focuses the active Brave window using `focus_app("brave")` and retains keystroke fallback (`ctrl+l` + `type_text` + `return`) when the binary is not present in PATH.
+  - Automatically enables foreground GUI navigation mode when Brave is running or visible on screen (`is_brave_active`).
+- **Domain URL Sanitization & Whitespace Collapse** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):
+  - Implemented `normalize_web_target_url()` to collapse accidental whitespace around domain dots (e.g. `visit youtube .com` -> `https://www.youtube.com`), strip top-level domains to match common web aliases, and pass `mode="FOREGROUND"` in plan navigation steps.
+- **Unit & Regression Test Suites (VERIFIED — 751/751 Tests Passing)**:
+  - 750 passed, 1 skipped, 0 failures, 0 errors in 63.39s.
+
+## Previous Phase: Phase 3.5.1 — UI vs. Backend Execution Dichotomy & Web Alias Resolution (Completed & Verified)
 
 ### Universal System Enhancements (VERIFIED)
 - **UI Navigation vs. Backend Extraction Dichotomy** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):

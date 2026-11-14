@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import time
 from tools.search import perform_web_search
 from tools.apps import open_app, default_app_tracker
@@ -157,13 +159,26 @@ class GUIFallbackBrowserProvider(BaseBrowserProvider):
         }
 
     def navigate(self, url):
+        if os.environ.get("BRAIN_MOCK_GUI") == "1":
+            obs = analyze_captured_screen(force_refresh=True)
+            return {"success": True, "url": url, "observation": obs, "provider": "gui_fallback"}
+
         open_app("brave")
+        brave_bin = shutil.which("brave-browser") or shutil.which("brave")
+        if brave_bin:
+            try:
+                subprocess.Popen([brave_bin, url])
+            except Exception:
+                pass
+
         from tools.apps import focus_app
         focus_app("brave")
-        hotkey(["ctrl", "l"])
-        type_text(url)
-        press_key("return")
-        time.sleep(1.0)
+        if not brave_bin:
+            hotkey(["ctrl", "l"])
+            time.sleep(0.1)
+            type_text(url)
+            press_key("return")
+        time.sleep(0.5)
         obs = analyze_captured_screen(force_refresh=True)
         return {"success": True, "url": url, "observation": obs, "provider": "gui_fallback"}
 
@@ -367,7 +382,9 @@ def browser_search_foreground(query):
 
 
 def browser_navigate(url, mode="AUTO"):
-    prefer_gui = (mode == "FOREGROUND")
+    from tools.apps import default_app_tracker, is_window_open
+    is_brave_active = default_app_tracker.is_running("brave") or (not os.environ.get("BRAIN_MOCK_GUI") and is_window_open("brave"))
+    prefer_gui = (mode == "FOREGROUND") or is_brave_active
     return default_browser_capability.navigate(url, prefer_gui=prefer_gui)
 
 

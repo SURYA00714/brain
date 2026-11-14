@@ -1,6 +1,38 @@
 import re
 
 
+def normalize_web_target_url(raw_target: str) -> str:
+    """
+    Normalizes human-entered web domains, URLs, and site aliases.
+    Handles accidental whitespace (e.g. 'youtube .com' -> 'https://www.youtube.com').
+    """
+    cleaned = re.sub(r"\s*\.\s*", ".", raw_target.strip())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    common_sites = {
+        "wikipedia": "https://www.wikipedia.org",
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "github": "https://www.github.com",
+        "reddit": "https://www.reddit.com",
+        "twitter": "https://www.twitter.com",
+        "x": "https://www.x.com",
+        "netflix": "https://www.netflix.com",
+        "amazon": "https://www.amazon.com",
+    }
+    c_low = cleaned.lower()
+    if c_low in common_sites:
+        return common_sites[c_low]
+
+    base_domain = re.sub(r"\.(com|org|net|io|co|in|edu|gov|app|dev)$", "", c_low)
+    if base_domain in common_sites:
+        return common_sites[base_domain]
+
+    if "." in cleaned:
+        return cleaned if cleaned.startswith(("http://", "https://")) else f"https://{cleaned}"
+    return f"https://www.{cleaned}.com"
+
+
 class FastRouter:
     """
     Lightweight Deterministic Pre-Router for Brain.
@@ -468,29 +500,11 @@ class FastRouter:
                 plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer=f"Opened Brave and {norm_sub_app}."))
                 return {"type": "plan", "plan": plan}
             elif raw_target and raw_target not in {"new tab", "a new tab", "tab"}:
-                common_sites = {
-                    "wikipedia": "https://www.wikipedia.org",
-                    "youtube": "https://www.youtube.com",
-                    "google": "https://www.google.com",
-                    "github": "https://www.github.com",
-                    "reddit": "https://www.reddit.com",
-                    "twitter": "https://www.twitter.com",
-                    "x": "https://www.x.com",
-                    "netflix": "https://www.netflix.com",
-                    "amazon": "https://www.amazon.com",
-                }
-                c_low = raw_target.lower()
-                if c_low in common_sites:
-                    target_url = common_sites[c_low]
-                elif "." in raw_target:
-                    target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
-                else:
-                    target_url = f"https://www.{raw_target}.com"
-
+                target_url = normalize_web_target_url(raw_target)
                 plan = ExecutionPlan(goal=clean_text)
                 plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
                 plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
-                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url, "mode": "FOREGROUND"}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
                 plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
                 return {"type": "plan", "plan": plan}
 
@@ -498,29 +512,11 @@ class FastRouter:
         nav_direct_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:go to|navigate to|visit|browse to)\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if nav_direct_match:
             raw_target = nav_direct_match.group(1).strip()
-            common_sites = {
-                "wikipedia": "https://www.wikipedia.org",
-                "youtube": "https://www.youtube.com",
-                "google": "https://www.google.com",
-                "github": "https://www.github.com",
-                "reddit": "https://www.reddit.com",
-                "twitter": "https://www.twitter.com",
-                "x": "https://www.x.com",
-                "netflix": "https://www.netflix.com",
-                "amazon": "https://www.amazon.com",
-            }
-            c_low = raw_target.lower()
-            if c_low in common_sites:
-                target_url = common_sites[c_low]
-            elif "." in raw_target:
-                target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
-            else:
-                target_url = f"https://www.{raw_target}.com"
-
+            target_url = normalize_web_target_url(raw_target)
             plan = ExecutionPlan(goal=clean_text)
             plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
             plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
-            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url, "mode": "FOREGROUND"}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
             plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened Brave and navigated to {target_url}."))
             return {"type": "plan", "plan": plan}
 
@@ -628,18 +624,6 @@ class FastRouter:
         if url_match and any(k in norm_text for k in ("read", "view", "fetch", "extract", "summarize", "page", "website", "article", "url", "what is on")):
             return {"type": "tool", "tool": "READ_WEB_PAGE", "arguments": {"url": url_match.group(0)}}
 
-        common_web_sites = {
-            "wikipedia": "https://www.wikipedia.org",
-            "youtube": "https://www.youtube.com",
-            "google": "https://www.google.com",
-            "github": "https://www.github.com",
-            "reddit": "https://www.reddit.com",
-            "twitter": "https://www.twitter.com",
-            "x": "https://www.x.com",
-            "netflix": "https://www.netflix.com",
-            "amazon": "https://www.amazon.com",
-        }
-
         read_web_match = re.match(
             r"^(?:can you\s+|could you\s+|please\s+)?(?:read_web_page|read\s+web\s*page|read\s+website|read\s+page|fetch\s+page|fetch\s+url|read\s+url|analyse\s+website|analyze\s+website|read\s+site)\s+(.+)$",
             norm_text,
@@ -655,13 +639,7 @@ class FastRouter:
 
         if read_web_match:
             raw_target = read_web_match.group(1).strip()
-            c_low = raw_target.lower()
-            if c_low in common_web_sites:
-                target_url = common_web_sites[c_low]
-            elif "." in raw_target:
-                target_url = raw_target if raw_target.startswith(("http://", "https://")) else f"https://{raw_target}"
-            else:
-                target_url = f"https://www.{raw_target}.org" if raw_target == "wikipedia" else f"https://www.{raw_target}.com"
+            target_url = normalize_web_target_url(raw_target)
             return {"type": "tool", "tool": "READ_WEB_PAGE", "arguments": {"url": target_url}}
 
         research_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:do\s+a\s+)?deep\s+research(?:\s+(?:on|about|for))?\s*(.+)$", norm_text, flags=re.IGNORECASE)
@@ -718,24 +696,14 @@ class FastRouter:
                             mapped_app = app_map[candidate_app.lower()]
                             return {"type": "tool", "tool": "OPEN_APP", "arguments": {"name": mapped_app, "app_name": mapped_app}}
 
-                        common_sites = {
-                            "wikipedia": "https://www.wikipedia.org",
-                            "youtube": "https://www.youtube.com",
-                            "google": "https://www.google.com",
-                            "github": "https://www.github.com",
-                            "reddit": "https://www.reddit.com",
-                            "twitter": "https://www.twitter.com",
-                            "x": "https://www.x.com",
-                            "netflix": "https://www.netflix.com",
-                            "amazon": "https://www.amazon.com",
-                        }
-                        c_low = candidate_app.lower()
-                        if c_low in common_sites or "." in c_low:
-                            target_url = common_sites.get(c_low, c_low if c_low.startswith(("http://", "https://")) else f"https://{c_low}")
+                        cleaned_c = re.sub(r"\s*\.\s*", ".", candidate_app.strip())
+                        c_low = cleaned_c.lower()
+                        if "." in cleaned_c or c_low in ("wikipedia", "youtube", "google", "github", "reddit", "twitter", "x", "netflix", "amazon"):
+                            target_url = normalize_web_target_url(cleaned_c)
                             plan = ExecutionPlan(goal=clean_text)
                             plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "brave"}, expected_outcome="Brave open", description="Open Brave browser"))
                             plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": "brave"}, expected_outcome="Brave focused", description="Focus Brave window"))
-                            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
+                            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="BROWSER_NAVIGATE", arguments={"url": target_url, "mode": "FOREGROUND"}, expected_outcome=f"Navigated to {target_url}", description=f"Navigate to {target_url}"))
                             plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {candidate_app} in Brave."))
                             return {"type": "plan", "plan": plan}
 
