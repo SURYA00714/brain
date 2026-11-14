@@ -208,7 +208,7 @@ def process_fast_route(
                 telemetry.provenance = "WORLD_STATE"
             elif tool_name in ("ANALYZE_SCREEN", "SCREENSHOT", "CHECK_DISK_SPACE"):
                 telemetry.provenance = "OBSERVED"
-            elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH"):
+            elif tool_name in ("WEB_SEARCH", "BROWSER_SEARCH", "READ_WEB_PAGE", "DEEP_RESEARCH"):
                 telemetry.provenance = "WEB"
             else:
                 telemetry.provenance = "OBSERVED"

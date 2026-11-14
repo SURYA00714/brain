@@ -14,7 +14,7 @@ from tools.window_manager import (
     list_windows, focus_window, minimize_window, maximize_window,
     restore_window, close_window, move_window, resize_window
 )
-from tools.search import perform_web_search
+from tools.search import perform_web_search, read_web_page, research_topic
 from tools.files import (
     list_files, find_files, read_text_file, write_text_file, create_folder,
     create_file, copy_file, move_file, rename_file, file_info, delete_file
@@ -469,6 +469,22 @@ default_registry.register(Tool(
     parameters={"query": "string"},
     risk_level="LOW",
     func=perform_web_search
+))
+
+default_registry.register(Tool(
+    name="READ_WEB_PAGE",
+    description="Fetches and extracts clean readable text content from an HTTP/HTTPS webpage URL.",
+    parameters={"url": "string"},
+    risk_level="LOW",
+    func=read_web_page
+))
+
+default_registry.register(Tool(
+    name="DEEP_RESEARCH",
+    description="Performs deep multi-source web research by searching the web, reading top source pages, and synthesizing facts.",
+    parameters={"query": "string"},
+    risk_level="LOW",
+    func=research_topic
 ))
 
 default_registry.register(Tool(

@@ -1,6 +1,16 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 3.4 — Linux Desktop Automation, Window Lifecycle & Deterministic Zero-Division Hardening (Completed & Verified)
+## Current State: Phase 3.5 — Effective Real-Life Internet Integration & Deep Research Engine (Completed & Verified)
+
+### Universal System Enhancements (VERIFIED)
+- **SSRF-Protected Webpage Content Reader** ([`tools/search.py`](file:///home/jai/Downloads/Brain/tools/search.py)): Added `read_web_page()` and `is_safe_web_url()` to fetch and parse any public HTTP/HTTPS page, stripping scripts, styles, navigation, and boilerplate while blocking loopback and private RFC-1918 subnets.
+- **Deep Multi-Source Web Research Loop** ([`tools/search.py`](file:///home/jai/Downloads/Brain/tools/search.py)): Upgraded `research_topic()` with full-cycle deep research: queries DuckDuckGo, deep-fetches top source articles, extracts key paragraphs matching query terms, and cross-references findings across domains.
+- **Model-Independent Grounded Synthesis** ([`core/cognition.py`](file:///home/jai/Downloads/Brain/core/cognition.py)): Research synthesis uses `tier="AUTO"` so local Ollama or Cloud models generate concise, verified summaries directly from live internet evidence.
+- **System Tool Registration & Fast Routing** ([`tools/registry.py`](file:///home/jai/Downloads/Brain/tools/registry.py), [`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)): Registered `READ_WEB_PAGE` and `DEEP_RESEARCH`. Added pre-routing for direct URL reading (`read page <url>`) and deep research while preserving semantic boundary protection for open-ended queries.
+- **Unit & Regression Test Suites (VERIFIED — 748/748 Tests Passing)**:
+  - 747 passed, 1 skipped, 0 failures, 0 errors in 55.59s.
+
+## Previous Phase: Phase 3.4 — Linux Desktop Automation, Window Lifecycle & Deterministic Zero-Division Hardening (Completed & Verified)
 
 ### Universal System Enhancements (VERIFIED)
 - **Linux Native Input Engine** ([`tools/input.py`](file:///home/jai/Downloads/Brain/tools/input.py)): Integrated native `/usr/bin/xdotool` fallback for `type_text`, `press_key`, `hotkey`, `move_mouse`, `click_mouse`, `double_click`, and `scroll`. Resolves desktop typing and keyboard navigation in browsers and terminals on Linux Mint / X11 without requiring pip dependencies.

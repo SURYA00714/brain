@@ -581,6 +581,16 @@ class FastRouter:
             return {"type": "tool", "tool": "LIST_APPS", "arguments": {}}
 
         # 3. Dedicated Pre-Router for Filesystem and Folder Operations (before App Launch)
+        url_match = re.search(r"https?://[^\s<>\"']+", clean_text)
+        if url_match and any(k in norm_text for k in ("read", "view", "fetch", "extract", "summarize", "page", "website", "article", "url", "what is on")):
+            return {"type": "tool", "tool": "READ_WEB_PAGE", "arguments": {"url": url_match.group(0)}}
+
+        research_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:do\s+a\s+)?deep\s+research(?:\s+(?:on|about|for))?\s*(.+)$", norm_text, flags=re.IGNORECASE)
+        if research_match:
+            r_topic = research_match.group(1).strip()
+            if r_topic and " and " not in r_topic and not any(k in norm_text for k in ("whether", "should", "recommend", "summarize", "tell me")):
+                return {"type": "tool", "tool": "DEEP_RESEARCH", "arguments": {"query": r_topic}}
+
         file_read_match = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:read|view|show|display|cat)\s+(?:the\s+)?(?:text\s+)?file\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if file_read_match:
             f_path = file_read_match.group(1).strip()

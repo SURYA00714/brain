@@ -86,6 +86,16 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
         data = result.get("data")
         return f"Here are the file results: {data if isinstance(data, str) else json.dumps(data)}"
 
+    if tool_upper == "READ_WEB_PAGE":
+        data = result.get("data") or result.get("content")
+        return str(data or "Webpage read successfully.")
+
+    if tool_upper == "DEEP_RESEARCH":
+        summary = result.get("retrieved_summary") or result.get("data")
+        sources = result.get("sources", [])
+        src_text = f"\n\nSources:\n" + "\n".join(f"- {s}" for s in sources[:3]) if sources else ""
+        return f"Research Findings:\n{summary}{src_text}"
+
     if tool_upper in ("WEB_SEARCH", "BROWSER_SEARCH"):
         raw_res = result.get("data") or result.get("results")
         if isinstance(raw_res, dict) and "results" in raw_res:

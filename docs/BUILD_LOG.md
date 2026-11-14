@@ -355,3 +355,20 @@
   - Enhanced compound request handling (`open terminal and check disk space and close it`) to properly append `CLOSE_APP` steps.
 - **Verification**:
   - Full automated regression suite: **741 tests executed: 740 passed, 1 skipped, 0 failures, 0 errors** (53.14s).
+
+### Phase 3.5 — Effective Real-Life Internet Integration & Deep Research Engine (2026-11-14)
+- **SSRF-Protected Webpage Content Reader (`READ_WEB_PAGE`)**:
+  - Implemented `is_safe_web_url()` and `read_web_page()` in `tools/search.py` using `requests` and `BeautifulSoup`.
+  - Enforces SSRF defense by blocking loopback, private RFC-1918 subnets, and non-HTTP/HTTPS schemes.
+  - Strips scripts, styles, navigation, and headers, extracting clean textual content up to 8,000 characters.
+- **Deep Multi-Source Web Research Loop (`DEEP_RESEARCH`)**:
+  - Upgraded `research_topic()` in `tools/search.py` to perform full-cycle research: search DuckDuckGo, fetch primary source articles, extract key paragraphs matching topic keywords, and cross-reference multiple domains.
+- **Model-Independent Grounded Synthesis**:
+  - In `core/cognition.py:execute_web_research()`, enabled model synthesis via `tier="AUTO"` so local Ollama or Cloud models generate concise, verified summaries directly from live internet evidence.
+- **System Tool Registration & Fast-Path Routing**:
+  - Registered `READ_WEB_PAGE` and `DEEP_RESEARCH` in `tools/registry.py` with parameter schemas.
+  - Added direct URL pre-routing in `tools/router.py` (`read page <url>`) and deep research pre-routing (`deep research <topic>`), while strictly preserving semantic boundary routing for open-ended queries.
+  - Added output formatting in `core/formatter.py` and step evidence verification in `core/cognition.py`.
+- **Verification**:
+  - New test suite: `tests/test_phase3_5_real_internet.py` (7/7 tests passing).
+  - Full automated regression suite: **748 tests executed: 747 passed, 1 skipped, 0 failures, 0 errors** (55.59s).

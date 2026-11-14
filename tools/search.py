@@ -1,6 +1,9 @@
+import ipaddress
+import re
 import requests
 from html.parser import HTMLParser
 from html import unescape
+from typing import Tuple, Optional, Any, Dict, List
 from urllib.parse import urlparse, parse_qs, unquote
 
 
@@ -213,11 +216,118 @@ def perform_web_search(query, max_results=3):
     return "\n\n".join(formatted_output)
 
 
-def research_topic(query: str, max_results: int = 3) -> dict:
+def is_safe_web_url(url: str) -> Tuple[bool, Optional[str]]:
+    """Validates that a URL is safe to fetch (HTTP/HTTPS, no private IP/SSRF)."""
+    if not url or not isinstance(url, str):
+        return False, "Error: URL parameter cannot be empty."
+    url_clean = url.strip()
+    if not url_clean.startswith(("http://", "https://")):
+        return False, "Error: Only HTTP and HTTPS URLs are allowed."
+    try:
+        parsed = urlparse(url_clean)
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "Error: Invalid URL hostname."
+
+        # Check against local / private IPs
+        if hostname.lower() in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+            return False, "Security Block: Access to localhost or internal network is prohibited."
+
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                return False, f"Security Block: Access to private IP '{hostname}' is prohibited."
+        except ValueError:
+            pass  # Domain name, not raw IP literal
+
+        return True, None
+    except Exception as e:
+        return False, f"Error validating URL: {str(e)}"
+
+
+def read_web_page(url: str, max_chars: int = 8000) -> dict:
+    """
+    Fetches an allowed public web page, strips scripts/markup,
+    and extracts clean readable text content.
+    Returns:
+    {
+        "success": bool,
+        "url": str,
+        "title": str,
+        "content": str,
+        "data": str,
+        "status": str
+    }
+    """
+    safe, err = is_safe_web_url(url)
+    if not safe:
+        return {"success": False, "url": url, "error": err, "status": "SECURITY_BLOCK", "data": err}
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    }
+    try:
+        response = requests.get(url.strip(), headers=headers, timeout=8, stream=True)
+        response.raise_for_status()
+
+        # Guard against non-text content types
+        content_type = response.headers.get("Content-Type", "").lower()
+        if content_type and not any(t in content_type for t in ("text/html", "text/plain", "application/xhtml+xml", "text/")):
+            err_msg = f"Unsupported content type: {content_type}"
+            return {"success": False, "url": url, "error": err_msg, "status": "UNSUPPORTED_TYPE", "data": err_msg}
+
+        raw_html = ""
+        for chunk in response.iter_content(chunk_size=32768, decode_unicode=True):
+            if chunk:
+                raw_html += chunk
+            if len(raw_html) > 262144:
+                break
+
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(raw_html, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "svg"]):
+                tag.decompose()
+            page_title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            text = soup.get_text(separator="\n")
+        except Exception:
+            page_title = ""
+            text = re.sub(r"<script[^>]*>.*?</script>", "", raw_html, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r"<[^>]+>", " ", text)
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        cleaned_text = "\n".join(lines)
+        if len(cleaned_text) > max_chars:
+            cleaned_text = cleaned_text[:max_chars] + f"\n... [Truncated at {max_chars} characters]"
+
+        summary_display = f"Title: {page_title}\nURL: {url}\n\nContent:\n{cleaned_text}" if page_title else f"URL: {url}\n\nContent:\n{cleaned_text}"
+
+        return {
+            "success": True,
+            "url": url,
+            "title": page_title,
+            "content": cleaned_text,
+            "data": summary_display,
+            "status": "COMPLETED"
+        }
+    except requests.exceptions.Timeout:
+        err_msg = "Request timed out after 8 seconds."
+        return {"success": False, "url": url, "error": err_msg, "status": "TIMEOUT", "data": err_msg}
+    except requests.exceptions.RequestException as e:
+        err_msg = f"Failed to fetch webpage: {str(e)}"
+        return {"success": False, "url": url, "error": err_msg, "status": "FETCH_ERROR", "data": err_msg}
+    except Exception as e:
+        err_msg = f"Error parsing webpage: {str(e)}"
+        return {"success": False, "url": url, "error": err_msg, "status": "PARSE_ERROR", "data": err_msg}
+
+
+def research_topic(query: str, max_results: int = 3, deep: bool = True) -> dict:
     """
     Intelligent web research workflow:
-    SEARCH -> COLLECT -> FILTER -> SYNTHESIZE
-    Returns structured research findings and grounded summary.
+    SEARCH -> COLLECT -> DEEP FETCH -> FILTER -> SYNTHESIZE
+    Returns structured research findings, extracted page facts, and grounded summary.
     """
     struct_res = perform_web_search_structured(query, max_results=max_results * 2)
     if not struct_res.get("success") or not struct_res.get("results"):
@@ -247,13 +357,35 @@ def research_topic(query: str, max_results: int = 3) -> dict:
         if len(findings) >= max_results:
             break
 
-    summary_text = "\n".join(f"- {f}" for f in findings)
+    # Deep Research: Fetch top source pages to extract primary ground truth facts
+    deep_extracts = []
+    if deep and sources:
+        query_words = [w.lower() for w in re.findall(r"\b\w{3,}\b", query) if w.lower() not in ("what", "when", "where", "which", "about", "latest", "recent", "search")]
+        for src_url in sources[:2]:
+            page_data = read_web_page(src_url, max_chars=3000)
+            if page_data.get("success") and page_data.get("content"):
+                p_text = page_data["content"]
+                p_paragraphs = [p.strip() for p in p_text.split("\n\n") if len(p.strip()) > 40]
+                matched_paragraphs = []
+                for p in p_paragraphs:
+                    p_low = p.lower()
+                    if any(w in p_low for w in query_words):
+                        matched_paragraphs.append(p[:300].strip())
+                        if len(matched_paragraphs) >= 2:
+                            break
+                for mp in matched_paragraphs:
+                    deep_extracts.append(f"Source ({src_url}): {mp}")
+
+    all_evidence = findings + deep_extracts
+    summary_text = "\n".join(f"- {f}" for f in (all_evidence[:5] if all_evidence else findings))
+
     return {
         "success": True,
         "query": query,
-        "findings": findings,
+        "findings": all_evidence if all_evidence else findings,
         "sources": sources,
-        "retrieved_summary": summary_text
+        "retrieved_summary": summary_text,
+        "deep_extracts": deep_extracts
     }
 
 

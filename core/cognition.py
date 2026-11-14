@@ -362,26 +362,29 @@ class CognitiveEngine:
             task_completeness=1.0 if not ev_eval["is_ambiguous"] else 0.7
         )
 
-        # Stage 2: Synthesis - Use Cloud model if available
-        cloud_avail = self.gateway.providers["groq"].is_available() or self.gateway.providers["gemini"].is_available()
-        if cloud_avail:
-            prompt = f"Summarize these verified search results about '{clean_q}' in 2 concise sentences:\n{joined_findings}"
-            res = self.gateway.generate(prompt, tier="CLOUD", timeout=5.0)
-            self.last_synthesis_response = res
-            if res.success and res.text:
-                claim_check = AccuracyEngine.verify_claims(res.text.strip(), relevant_findings)
-                return {
-                    "epistemic_status": EpistemicStatus.RETRIEVED,
-                    "text": f"Summary for '{clean_q}':\n{res.text.strip()}{conflict_note}",
-                    "sources": relevant_sources or sources,
-                    "model_used": True,
-                    "provider": res.provider,
-                    "confidence": self.last_confidence.to_dict(),
-                    "claim_verification": claim_check
-                }
+        # Stage 2: Synthesis - Use Available Model via Gateway (Cloud or Local Ollama)
+        prompt = (
+            f"You are a factual research assistant. Synthesize these verified search results about '{clean_q}' into 2 concise, factual sentences:\n"
+            f"{joined_findings}\n\n"
+            "Summary:"
+        )
+        res = self.gateway.generate(prompt, tier="AUTO", timeout=8.0)
+        self.last_synthesis_response = res
+        if res.success and res.text:
+            clean_summary = res.text.strip()
+            claim_check = AccuracyEngine.verify_claims(clean_summary, relevant_findings)
+            return {
+                "epistemic_status": EpistemicStatus.RETRIEVED,
+                "text": f"Summary for '{clean_q}':\n{clean_summary}{conflict_note}",
+                "sources": relevant_sources or sources,
+                "model_used": True,
+                "provider": res.provider,
+                "confidence": self.last_confidence.to_dict(),
+                "claim_verification": claim_check
+            }
 
         self.last_synthesis_response = None
-        # Offline deterministic fallback: return clean extracted bullet points directly (<1ms)
+        # Deterministic fallback: return clean extracted bullet points directly
         answer = f"Based on retrieved web sources for '{clean_q}':\n{joined_findings}{conflict_note}"
         return {
             "epistemic_status": EpistemicStatus.RETRIEVED,
@@ -1284,13 +1287,19 @@ def verify_step_execution(tool_name: str, arguments: Dict[str, Any], result: Dic
             return True, "VERIFIED", f"File read verified ({len(str(data))} characters)."
         return False, "FAILED", "File read returned null data."
 
-    if tool_upper in ("WEB_SEARCH", "BROWSER_SEARCH"):
-        results = result.get("results") or data
+    if tool_upper in ("WEB_SEARCH", "BROWSER_SEARCH", "DEEP_RESEARCH"):
+        results = result.get("results") or result.get("findings") or data
         if isinstance(results, list) and len(results) > 0:
             return True, "VERIFIED", f"Web search verified with {len(results)} results."
         if isinstance(results, str) and results:
             return True, "VERIFIED", "Web search results verified."
         return False, "FAILED", "Web search yielded zero results or empty payload."
+
+    if tool_upper == "READ_WEB_PAGE":
+        content = result.get("content") or data
+        if content and not result.get("error"):
+            return True, "VERIFIED", f"Webpage read verified ({len(str(content))} characters)."
+        return False, "FAILED", f"Webpage read failed: {result.get('error', 'empty content')}"
 
     # General fallback: non-empty data payload
     if data is not None:
