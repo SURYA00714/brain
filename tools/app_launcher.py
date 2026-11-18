@@ -187,12 +187,13 @@ def resolve_app(name: str) -> Optional[Any]:
 
     # Strategy 1: Exact match on desktop_id (stem or full), Name, or GenericName
     exact_matches = []
+    query_variants = {lowered_query, lowered_query.replace("_", " ")}
     for desktop_id, app in apps_index.items():
         stem = desktop_id.rsplit(".desktop", 1)[0].lower()
         app_name = app["Name"].lower()
         generic = app.get("GenericName", "").lower()
 
-        if lowered_query in (stem, app_name, generic, desktop_id.lower()):
+        if any(v in (stem, app_name, generic, desktop_id.lower()) for v in query_variants):
             exact_matches.append(app)
 
     if len(exact_matches) == 1:

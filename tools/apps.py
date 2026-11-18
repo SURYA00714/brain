@@ -283,9 +283,9 @@ def normalize_app_name(app_name):
     clean_name = app_name.strip().lower()
     if "brave" in clean_name or clean_name == "browser":
         return "brave"
-    elif "file_manager" in clean_name or "filemanager" in clean_name or "thunar" in clean_name or clean_name == "files":
+    elif "file_manager" in clean_name or "file manager" in clean_name or "filemanager" in clean_name or "thunar" in clean_name or clean_name == "files":
         return "file_manager"
-    elif "text_editor" in clean_name or "texteditor" in clean_name or "mousepad" in clean_name or "xed" in clean_name or clean_name in ("editor", "nano", "xedit"):
+    elif "text_editor" in clean_name or "text editor" in clean_name or "texteditor" in clean_name or "mousepad" in clean_name or "xed" in clean_name or clean_name in ("editor", "nano", "xedit"):
         return "text_editor"
     elif "terminal" in clean_name or "console" in clean_name or "xfce4-terminal" in clean_name:
         return "terminal"

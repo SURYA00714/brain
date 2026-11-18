@@ -696,11 +696,42 @@ class FastRouter:
         # 3e. Open terminal and check free disk space
         if "terminal" in norm_text and ("disk" in norm_text or "space" in norm_text or "storage" in norm_text):
             plan = ExecutionPlan(goal=clean_text)
-            plan.add_step(ExecutionStep(action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "terminal"}))
-            plan.add_step(ExecutionStep(action_type="tool", tool_name="CHECK_DISK_SPACE", arguments={"target_path": "/"}))
+            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "terminal"}, expected_outcome="Terminal open", description="Open Terminal"))
+            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="CHECK_DISK_SPACE", arguments={"target_path": "/"}, expected_outcome="Disk space measured", description="Check disk space"))
             if any(k in norm_text for k in ("close", "exit", "quit")):
-                plan.add_step(ExecutionStep(action_type="tool", tool_name="CLOSE_APP", arguments={"app_name": "terminal"}))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="CLOSE_APP", arguments={"app_name": "terminal"}, expected_outcome="Terminal closed", description="Close Terminal"))
+                plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer="Opened terminal, checked disk space, and closed terminal."))
+            else:
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer="Opened terminal and checked disk space."))
             return {"type": "plan", "plan": plan}
+
+        # 3f. Open terminal and check CPU / memory usage
+        if "terminal" in norm_text and "cpu" in norm_text:
+            plan = ExecutionPlan(goal=clean_text)
+            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "terminal"}, expected_outcome="Terminal open", description="Open Terminal"))
+            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="CPU_STATUS", arguments={}, expected_outcome="CPU status retrieved", description="Check CPU usage"))
+            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer="Opened terminal and checked system CPU usage."))
+            return {"type": "plan", "plan": plan}
+
+        if "terminal" in norm_text and ("memory" in norm_text or "ram" in norm_text):
+            plan = ExecutionPlan(goal=clean_text)
+            plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": "terminal"}, expected_outcome="Terminal open", description="Open Terminal"))
+            plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="MEMORY_STATUS", arguments={}, expected_outcome="Memory status retrieved", description="Check RAM usage"))
+            plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer="Opened terminal and checked system memory usage."))
+            return {"type": "plan", "plan": plan}
+
+        # 3g. Open two desktop applications in sequence (e.g. "open terminal and open text editor")
+        m_two_apps = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|launch|start)\s+([a-zA-Z0-9_\-\s]+?)\s+(?:and|,)\s*(?:open|launch|start)\s+([a-zA-Z0-9_\-\s]+)$", norm_text, flags=re.IGNORECASE)
+        if m_two_apps:
+            from tools.apps import normalize_app_name, APPROVED_APPS
+            app1 = normalize_app_name(m_two_apps.group(1).strip())
+            app2 = normalize_app_name(m_two_apps.group(2).strip())
+            if app1 in APPROVED_APPS and app2 in APPROVED_APPS and app1 != app2:
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": app1}, expected_outcome=f"{app1.capitalize()} open", description=f"Open {app1}"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="OPEN_APP", arguments={"app_name": app2}, expected_outcome=f"{app2.capitalize()} open", description=f"Open {app2}"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="final", answer=f"Opened {app1.capitalize()} and {app2.capitalize()}."))
+                return {"type": "plan", "plan": plan}
 
         # List Apps (Developer/Debug Installed Applications Inventory)
         list_apps_queries = {"list apps", "list installed apps", "show installed apps", "show apps", "list applications", "installed apps"}
@@ -864,9 +895,9 @@ class FastRouter:
             # System Information & Metrics
             if norm_text in {"system info", "show system info", "system information", "show system information", "system status"}:
                 return {"type": "tool", "tool": "SYSTEM_INFO", "arguments": {}}
-            if norm_text in {"cpu status", "show cpu status", "show cpu", "cpu info", "cpu usage", "what is cpu usage", "what is the cpu usage", "what is my cpu usage", "get cpu usage", "check cpu usage", "check cpu"}:
+            if re.search(r"\b(?:check|show|get|what is(?: the)?)\s+(?:system\s+)?cpu(?:\s+usage|\s+status|\s+info)?\b", norm_text) or norm_text in {"cpu status", "show cpu status", "show cpu", "cpu info", "cpu usage", "what is cpu usage", "what is the cpu usage", "what is my cpu usage", "get cpu usage", "check cpu usage", "check cpu"}:
                 return {"type": "tool", "tool": "CPU_STATUS", "arguments": {}}
-            if norm_text in {"memory status", "show memory status", "show memory", "memory info", "ram usage", "what is ram usage", "check ram", "ram status"}:
+            if re.search(r"\b(?:check|show|get|what is(?: the)?)\s+(?:system\s+)?(?:memory|ram)(?:\s+usage|\s+status|\s+info)?\b", norm_text) or norm_text in {"memory status", "show memory status", "show memory", "memory info", "ram usage", "what is ram usage", "check ram", "ram status"}:
                 return {"type": "tool", "tool": "MEMORY_STATUS", "arguments": {}}
 
             # Disruptive Operations (Confirmation Gated)
