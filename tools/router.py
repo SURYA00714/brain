@@ -497,6 +497,23 @@ class FastRouter:
                     plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {matched_site.capitalize()} and searched for '{clean_q}'."))
                 return {"type": "plan", "plan": plan}
 
+        # 3a-00b. Universal Website Search & Input Detection across arbitrary sites:
+        m_univ1 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?search(?:\s+for)?\s+(.+?)\s+(?:on|in)\s+(this website|the current website|this site|the active website|current site|active page|this page|[a-zA-Z0-9_\-\./:]+)$", norm_text, flags=re.IGNORECASE)
+        if m_univ1:
+            raw_q = m_univ1.group(1).strip()
+            raw_site = m_univ1.group(2).strip()
+            if raw_site.lower() in ("this website", "the current website", "this site", "the active website", "current site", "active page", "this page"):
+                return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": ""}}
+            elif "." in raw_site or raw_site.startswith(("http://", "https://")):
+                target_url = raw_site if raw_site.startswith(("http://", "https://")) else f"https://{raw_site}"
+                return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": target_url}}
+
+        # "enter [this query] <query> into [the] [current website's] search box/input/bar"
+        m_enter = re.match(r"^(?:can you\s+|could you\s+|please\s+)?enter\s+(?:this\s+query|query|the\s+query)?\s*(.+?)\s+into\s+(?:the\s+)?(?:current\s+website(?:'s)?\s+|active\s+page(?:'s)?\s+|this\s+website(?:'s)?\s+)?search\s*(?:box|input|field|bar)$", norm_text, flags=re.IGNORECASE)
+        if m_enter:
+            q = m_enter.group(1).strip().strip("\"'")
+            return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": q, "url": ""}}
+
         # 3a-0. Open Brave, open new tab and search for X [optional: and click first result]
         new_tab_search_match = re.match(
             r"^(?:open )?brave(?:,)? (?:and )?(?:open )?(?:a )?new tab (?:and )?(?:search (?:for )?|find )(.+)$",

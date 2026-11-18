@@ -322,7 +322,11 @@ class BrowserCapability:
         self.structured_provider = provider if provider else StructuredBrowserProvider()
         self.gui_provider = provider if provider else GUIFallbackBrowserProvider()
 
-    def search(self, query, prefer_gui=False):
+    def search(self, query, prefer_gui=False, url=None):
+        if url is not None:
+            from tools.search_detection import default_search_executor
+            return default_search_executor.execute_search(query=query, url=url if url else None)
+
         if self.custom_provider:
             return self.custom_provider.search(query)
 
@@ -371,7 +375,11 @@ def browser_new_tab():
     return default_browser_capability.new_tab()
 
 
-def browser_search(query, mode="AUTO"):
+def browser_search(query, url=None, mode="AUTO"):
+    if url is not None:
+        from tools.search_detection import default_search_executor
+        return default_search_executor.execute_search(query=query, url=url if url else None)
+
     prefer_gui = (mode == "FOREGROUND")
     return default_browser_capability.search(query, prefer_gui=prefer_gui)
 

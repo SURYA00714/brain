@@ -187,8 +187,9 @@ class ToolRegistry:
                 result = tool.func(target, w, h)
             elif tool.name == "BROWSER_SEARCH":
                 query = arguments.get("query") or arguments.get("keywords") or ""
+                url = arguments.get("url") or arguments.get("target_url")
                 mode = arguments.get("mode", "AUTO")
-                result = tool.func(query, mode=mode)
+                result = tool.func(query, url=url, mode=mode)
             elif tool.name == "BROWSER_NAVIGATE":
                 url = arguments.get("url") or arguments.get("link") or ""
                 mode = arguments.get("mode", "AUTO")
@@ -708,8 +709,8 @@ default_registry.register(Tool(
 
 default_registry.register(Tool(
     name="BROWSER_SEARCH",
-    description="Capability tool to execute a web search query. Uses structured interaction by default (AUTO/BACKGROUND) or direct browser GUI controls (FOREGROUND).",
-    parameters={"query": "string"},
+    description="Universal browser search tool. Navigates to a website (or uses active page), detects candidate search fields, enters the query, and verifies results.",
+    parameters={"query": "string", "url": "string"},
     risk_level="LOW",
     func=browser_search
 ))

@@ -1,6 +1,21 @@
 # Project State — Brain / YUI Intelligence Core
 
-## Current State: Phase 3.5.3 — In-Site Web Search Workflow & Planning Intelligence (Completed & Verified)
+## Current State: Phase 3.5.4 — Universal Website Search & Input Detection Engine (Completed & Verified)
+
+### Universal System Enhancements (VERIFIED)
+- **Universal Search Detection & Candidate Ranking Engine** ([`tools/search_detection.py`](file:///home/jai/Downloads/Brain/tools/search_detection.py)):
+  - Built `BrowserPageInspector`: Extracts candidate search inputs, textareas, and contenteditable elements across forms, iframes, and fallback DOM trees while strictly excluding password, billing, token, OTP, CVV, hidden, disabled, and readonly fields.
+  - Built `SearchFieldRanker`: Implemented multi-signal confidence-based scoring across input types (`type="search"` +100), ARIA roles (`role="searchbox"` +90, form `role="search"` +40), names/IDs (`search`, `q`, `query` +50), placeholders/labels (+60), and associated submit/search buttons (+30), while penalizing non-search inputs (email, newsletter, login -150).
+  - Handles ambiguity detection returning `AMBIGUOUS_INPUT` when multiple distinct search inputs tie, and `INPUT_NOT_FOUND` when below confidence thresholds.
+- **Search Verification & Unified Tool Integration** ([`tools/search_detection.py`](file:///home/jai/Downloads/Brain/tools/search_detection.py), [`tools/browser.py`](file:///home/jai/Downloads/Brain/tools/browser.py), [`tools/registry.py`](file:///home/jai/Downloads/Brain/tools/registry.py)):
+  - Built `SearchVerificationEngine`: Compares pre- and post-submission DOM and URL state (query params, `/search` path navigation, result containers) emitting explicit statuses: `SUCCESS`, `PARTIAL_SUCCESS`, `INPUT_NOT_FOUND`, `AMBIGUOUS_INPUT`, `SUBMISSION_FAILED`, `VERIFICATION_FAILED`.
+  - Upgraded universal `browser_search(query, url=None)` tool to inspect unfamiliar websites or active browser pages, input query text, click associated buttons or submit with Enter, and return evidence-backed execution results.
+- **Fast-Path Universal Web Search Routing** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):
+  - Added routing for arbitrary domains (`search <query> on/in <url>`) and active page searches (`search for <query> on this website`, `enter <query> into search box`).
+- **Unit & Regression Test Suites (VERIFIED — 766/766 Tests Passing)**:
+  - 765 passed, 1 skipped, 0 failures, 0 errors in 68.15s across 14 new dedicated test scenarios in [`tests/test_universal_browser_search.py`](file:///home/jai/Downloads/Brain/tests/test_universal_browser_search.py).
+
+## Previous Phase: Phase 3.5.3 — In-Site Web Search Workflow & Planning Intelligence (Completed & Verified)
 
 ### Universal System Enhancements (VERIFIED)
 - **Targeted In-Site Search Intent Engine** ([`tools/router.py`](file:///home/jai/Downloads/Brain/tools/router.py)):

@@ -410,5 +410,21 @@
   - Expanded `tests/test_phase3_5_real_internet.py` with `test_11_specific_site_search_workflow` (11/11 tests passing).
   - Full automated regression suite: **752 tests executed: 751 passed, 1 skipped, 0 failures, 0 errors** (72.91s).
 
+### Phase 3.5.4 — Universal Website Search & Input Detection Engine (2026-11-18)
+- **Universal Search Detection & Candidate Ranking Engine**:
+  - Created `tools/search_detection.py` with `BrowserPageInspector` and `SearchFieldRanker`.
+  - Discovers inputs across standard DOM, textareas, contenteditable elements, and embedded iframes.
+  - Applies safety filtering to strictly exclude passwords, tokens, pins, card numbers, billing fields, hidden elements, and disabled inputs.
+  - Implemented multi-signal confidence scoring prioritizing `type="search"`, `role="searchbox"`, search names/IDs (`q`, `query`, `search`), search placeholders/labels, and associated search buttons while penalizing non-search inputs (`email`, `username`, `phone`, `newsletter`).
+  - Supports ambiguity detection returning `AMBIGUOUS_INPUT` when multiple candidate inputs tie, and `INPUT_NOT_FOUND` when below confidence thresholds.
+- **Search Verification & Unified Tool Integration**:
+  - Built `SearchVerificationEngine` comparing pre- and post-submission DOM and URL states, returning explicit execution statuses: `SUCCESS`, `PARTIAL_SUCCESS`, `INPUT_NOT_FOUND`, `AMBIGUOUS_INPUT`, `SUBMISSION_FAILED`, `VERIFICATION_FAILED`.
+  - Upgraded universal `browser_search(query, url=None)` tool in `tools/browser.py` and `tools/registry.py` to support both URL navigation and active-page search.
+  - Added pre-routing in `tools/router.py` for arbitrary website queries (`search <query> on <url>`) and active page searches (`search for <query> on this website`, `enter <query> into search box`).
+- **Verification**:
+  - Created `tests/test_universal_browser_search.py` covering all 14 required scenarios (14/14 tests passing).
+  - Full regression test suite passed: **766 tests executed: 765 passed, 1 skipped, 0 failures, 0 errors** (68.16s).
+
+
 
 
