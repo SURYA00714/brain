@@ -474,6 +474,19 @@ class FastRouter:
                     matched_site = s_cand
                     matched_query = m_site3.group(2).strip()
 
+        if not matched_site:
+            m_open_in = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|play|watch|find)\s+(.+?)\s+(?:in|on)\s+([a-zA-Z0-9_\-\.]+)$", norm_text, flags=re.IGNORECASE)
+            if m_open_in:
+                s_cand = re.sub(r"\.(com|org|net|io|co|to)$", "", m_open_in.group(2).lower().strip())
+                if s_cand in site_search_urls and s_cand != "brave":
+                    matched_site = s_cand
+                    matched_query = m_open_in.group(1).strip()
+                elif s_cand not in ("terminal", "file_manager", "calculator", "text_editor"):
+                    # Arbitrary web service or media destination like "reanime", "crunchyroll"
+                    q_term = m_open_in.group(1).strip()
+                    site_term = m_open_in.group(2).strip()
+                    return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": f"{q_term} {site_term}", "mode": "FOREGROUND"}}
+
         if matched_site and matched_query:
             import urllib.parse
             # Check for click / open first result

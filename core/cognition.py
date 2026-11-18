@@ -288,6 +288,14 @@ class CognitiveEngine:
                 "2. One-shot command: type `brain \"<your task>\"`\n"
                 "3. Direct project execution: `./brain-app` or `python3 brain.py` from `/home/jai/Downloads/Brain`."
             )
+
+        if "approved safety allowlist" in p_low or "safety allowlist" in p_low or "approved apps" in p_low or "allowed apps" in p_low:
+            return (
+                "The approved safety allowlist is Brain's security boundary for desktop execution. "
+                "To protect your system from executing arbitrary binaries or untrusted scripts, Brain only launches verified applications: "
+                "Brave Browser, Terminal, File Manager (Thunar), Text Editor, and Calculator. "
+                "Websites, streaming services, and online content (such as YouTube, anime, or search portals) are accessed through Brave Browser."
+            )
         return None
 
     def diagnose_terminal_output(self, text: str) -> Optional[str]:

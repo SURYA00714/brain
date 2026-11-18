@@ -72,5 +72,14 @@ class TestMultiStepSequencePlanning(unittest.TestCase):
         self.assertIn("Opened Youtube and searched for 'gemini'", ans)
 
 
+    def test_open_one_piece_in_reanime_routes_to_browser_search(self):
+        query = "open one piece in reanime"
+        route_res = default_router.route(query)
+        self.assertIsNotNone(route_res)
+        self.assertEqual(route_res.get("type"), "tool")
+        self.assertEqual(route_res.get("tool"), "BROWSER_SEARCH")
+        self.assertEqual(route_res.get("arguments", {}).get("query"), "one piece reanime")
+
+
 if __name__ == "__main__":
     unittest.main()
