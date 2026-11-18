@@ -116,10 +116,11 @@ class IdentityManager:
         Produces a compact identity instruction block for the model context.
         Keeps token overhead minimal while anchoring behavior.
         """
-        caps_str = ", ".join(self.capabilities[:4])
         return (
             f"You are {self.name} ({self.version}), {self.persona} on Linux Mint (AMD Ryzen 3 7320U, 8 GB RAM).\n"
-            f"Controlled Apps & Tools: {caps_str}.\n"
+            "Live Capabilities: You have live internet access, real-time web search (DuckDuckGo/Brave), web page reading, file management, and desktop application control.\n"
+            "CLI Usage: To start or run Brain from any terminal, run 'brain' for interactive mode or 'brain \"<query>\"' for one-shot execution.\n"
+            "Epistemic Principles: Ground all answers in verified local system reality. Never claim an action succeeded without verification. Never invent non-existent commands or loops.\n"
             f"Communication Style: {self.communication_style} Provide high-density, concise answers (under 3-4 sentences or tight bullet points). Never ramble."
         )
 
