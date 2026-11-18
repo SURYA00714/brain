@@ -451,7 +451,7 @@ class FastRouter:
         matched_site = None
         matched_query = None
 
-        m_site1 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?open\s+([a-zA-Z0-9_\-\.]+)\s+(?:and\s+search(?:\s+for)?|search(?:\s+for)?)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        m_site1 = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|go to|navigate to|visit|browse to)\s+([a-zA-Z0-9_\-\.]+)\s+(?:and\s+search(?:\s+for)?|search(?:\s+for)?)\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if m_site1:
             s_cand = re.sub(r"\.(com|org|net|io|co)$", "", m_site1.group(1).lower().strip())
             if s_cand in site_search_urls and s_cand != "brave":
@@ -507,6 +507,14 @@ class FastRouter:
             elif "." in raw_site or raw_site.startswith(("http://", "https://")):
                 target_url = raw_site if raw_site.startswith(("http://", "https://")) else f"https://{raw_site}"
                 return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": target_url}}
+
+        # "go to/open/visit <website> and search <query>" for arbitrary websites
+        m_univ_nav = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|go to|navigate to|visit|browse to)\s+([a-zA-Z0-9_\-\./:]+)\s+(?:and\s+search(?:\s+for)?|search(?:\s+for)?)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if m_univ_nav:
+            raw_site = m_univ_nav.group(1).strip()
+            raw_q = m_univ_nav.group(2).strip()
+            target_url = raw_site if raw_site.startswith(("http://", "https://")) else f"https://{raw_site}"
+            return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": target_url}}
 
         # "enter [this query] <query> into [the] [current website's] search box/input/bar"
         m_enter = re.match(r"^(?:can you\s+|could you\s+|please\s+)?enter\s+(?:this\s+query|query|the\s+query)?\s*(.+?)\s+into\s+(?:the\s+)?(?:current\s+website(?:'s)?\s+|active\s+page(?:'s)?\s+|this\s+website(?:'s)?\s+)?search\s*(?:box|input|field|bar)$", norm_text, flags=re.IGNORECASE)
