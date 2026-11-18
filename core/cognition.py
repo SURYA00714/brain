@@ -174,6 +174,26 @@ class CognitiveEngine:
         if lowered in greetings or lowered in gratitudes or lowered in farewells:
             return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC, "execution_mode": exec_mode}
 
+        # Terminal error log / command failure paste
+        term_diag = self.diagnose_terminal_output(text)
+        if term_diag:
+            return {
+                "intent": "TERMINAL_DIAGNOSIS",
+                "level": CognitiveLevel.LEVEL_0_DETERMINISTIC,
+                "diagnosis": term_diag,
+                "execution_mode": exec_mode
+            }
+
+        # Self-knowledge / Brain operational questions
+        self_know = self.handle_self_knowledge(text)
+        if self_know:
+            return {
+                "intent": "INFORMATION",
+                "level": CognitiveLevel.LEVEL_0_DETERMINISTIC,
+                "direct_answer": self_know,
+                "execution_mode": exec_mode
+            }
+
         # Identity
         if lowered in {"who are you", "what are you", "what can you do", "capabilities", "help"}:
             return {"intent": "CONVERSATION", "level": CognitiveLevel.LEVEL_0_DETERMINISTIC, "execution_mode": exec_mode}
@@ -249,11 +269,72 @@ class CognitiveEngine:
         """Assigns the explicit execution level."""
         return intent_dict.get("level", CognitiveLevel.LEVEL_2_NORMAL)
 
+    def handle_self_knowledge(self, prompt: str) -> Optional[str]:
+        """
+        Answers operational and architectural queries about Brain and how to run it.
+        """
+        p_low = prompt.lower().strip(".?!")
+        start_triggers = (
+            "how to start you", "how to run you", "how to launch you",
+            "how to start brain", "how to run brain", "how to launch brain",
+            "how do i start you", "how do i run you", "how do i launch you",
+            "how do i start brain", "how do i run brain", "how do i launch brain",
+            "how can i start you", "how can i run you", "how to open you"
+        )
+        if any(trig in p_low for trig in start_triggers):
+            return (
+                "You can start and run Brain in your terminal using:\n"
+                "1. Interactive TUI: type `brain`\n"
+                "2. One-shot command: type `brain \"<your task>\"`\n"
+                "3. Direct project execution: `./brain-app` or `python3 brain.py` from `/home/jai/Downloads/Brain`."
+            )
+        return None
+
+    def diagnose_terminal_output(self, text: str) -> Optional[str]:
+        """
+        Inspects pasted terminal output/errors and provides grounded, factual diagnostic guidance.
+        """
+        lowered = text.lower()
+        # 1. Command not found
+        m_cnf = re.search(r"Command ['\"]?([a-zA-Z0-9_\-\.]+)['\"]? not found|([a-zA-Z0-9_\-\.]+):\s+command not found", text, flags=re.IGNORECASE)
+        if m_cnf:
+            cmd = m_cnf.group(1) or m_cnf.group(2)
+            cmd_clean = cmd.strip()
+            if cmd_clean.lower() in ("brain", "brain-app"):
+                return (
+                    f"The command '{cmd_clean}' was not found in your current shell's PATH.\n"
+                    "Remedy:\n"
+                    "1. Brain is located at /home/jai/Downloads/Brain. You can launch it directly with:\n"
+                    "   ./brain-app\n"
+                    "2. To use 'brain' globally from anywhere, ensure ~/.local/bin is in your PATH:\n"
+                    "   export PATH=\"$HOME/.local/bin:$PATH\"\n"
+                    "   (This is configured in ~/.bashrc; reload it with 'source ~/.bashrc')."
+                )
+            return (
+                f"The command '{cmd_clean}' is not installed or not in your system PATH.\n"
+                f"Check if the package is installed, or install it using 'sudo apt install <package>' or your package manager."
+            )
+        # 2. Python traceback / ModuleNotFoundError
+        if "traceback (most recent call last)" in lowered or "modulenotfounderror" in lowered:
+            m_mod = re.search(r"No module named ['\"]([^'\"]+)['\"]", text)
+            if m_mod:
+                mod = m_mod.group(1)
+                return (
+                    f"Python script failed with ModuleNotFoundError: No module named '{mod}'.\n"
+                    f"Remedy: Ensure you are running within the virtual environment or install the missing module:\n"
+                    f"pip install {mod}"
+                )
+        return None
+
     def handle_static_information(self, user_request: str) -> Optional[str]:
         """
         Answers known educational, technical, and architectural concepts directly
         with grounded, accurate definitions without performing unnecessary web queries.
         """
+        self_ans = self.handle_self_knowledge(user_request)
+        if self_ans:
+            return self_ans
+
         lowered = user_request.lower().strip(".?!")
 
         knowledge_base = {

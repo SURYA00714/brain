@@ -182,9 +182,23 @@ def _raw_run_planner_task(user_request, registry=None, max_steps=MAX_STEPS, quie
         intent_info = default_cognition.understand_intent(effective_request)
         intent_name = intent_info.get("intent")
 
+        # 0. Terminal Error / Shell Output Diagnosis (Grounded evidence analysis)
+        if intent_name == "TERMINAL_DIAGNOSIS":
+            diag_ans = intent_info.get("diagnosis") or default_cognition.diagnose_terminal_output(effective_request)
+            if diag_ans:
+                default_short_term_memory.add_turn(user_request, diag_ans)
+                profiler.record_route("COGNITIVE_ENGINE", "TERMINAL_DIAGNOSIS")
+                profiler.record_total()
+                profiler.log_summary(user_request, mode="AUTO", status="SUCCESS")
+                telemetry.total_ms = (time.perf_counter() - t_req_start) * 1000.0
+                telemetry.llm_calls_this_request = 0
+                telemetry.provenance = "DIAGNOSTIC_EVIDENCE"
+                default_telemetry.finish_request()
+                return diag_ans
+
         # 1. Static Information (no LLM, no web search needed)
         if intent_name == "INFORMATION":
-            static_ans = default_cognition.handle_static_information(effective_request)
+            static_ans = intent_info.get("direct_answer") or default_cognition.handle_static_information(effective_request)
             if static_ans:
                 default_short_term_memory.add_turn(user_request, static_ans)
                 profiler.record_route("COGNITIVE_ENGINE", "STATIC_INFO")

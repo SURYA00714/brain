@@ -108,11 +108,67 @@ class BrainAppCore:
         elif self.current_mode == "VERIFIED":
             forced_mode = ExecutionMode.VERIFIED
 
-        # 3. Check if the query is an OS/desktop tool command (e.g. apps, bluetooth, wifi, files)
-        routed = default_router.route(resolved_prompt)
-        p_lower = resolved_prompt.lower()
-        tool_keywords = ("open ", "launch ", "click ", "type ", "terminal", "screenshot", "find files", "list files")
-        is_tool_action = (routed is not None) or any(k in p_lower for k in tool_keywords)
+        # 3. Check for Terminal Error Log / Output Paste
+        term_diag = self.cognitive_engine.diagnose_terminal_output(resolved_prompt)
+        if term_diag:
+            dur_ms = (time.perf_counter() - start_time) * 1000.0
+            ram_after = psutil.virtual_memory().used / (1024 * 1024)
+            default_short_term_memory.add_turn(prompt, term_diag)
+            return {
+                "text": term_diag,
+                "strategy": "DIAGNOSTIC_ANALYSIS",
+                "mode": "VERIFIED",
+                "execution_path": "SYSTEM_DIAGNOSTIC",
+                "model_id": self.active_model,
+                "duration_ms": round(dur_ms, 1),
+                "duration_sec": round(dur_ms / 1000.0, 2),
+                "ram_mb": round(ram_after, 1),
+                "ram_gb": round(ram_after / 1024.0, 2),
+                "verified": True,
+                "confidence": 1.0,
+            }
+
+        # 4. Check for Brain Self-Knowledge / Operational Questions
+        self_know = self.cognitive_engine.handle_self_knowledge(resolved_prompt)
+        if self_know:
+            dur_ms = (time.perf_counter() - start_time) * 1000.0
+            ram_after = psutil.virtual_memory().used / (1024 * 1024)
+            default_short_term_memory.add_turn(prompt, self_know)
+            return {
+                "text": self_know,
+                "strategy": "SYSTEM_SELF_KNOWLEDGE",
+                "mode": "VERIFIED",
+                "execution_path": "GROUNDED_KNOWLEDGE",
+                "model_id": self.active_model,
+                "duration_ms": round(dur_ms, 1),
+                "duration_sec": round(dur_ms / 1000.0, 2),
+                "ram_mb": round(ram_after, 1),
+                "ram_gb": round(ram_after / 1024.0, 2),
+                "verified": True,
+                "confidence": 1.0,
+            }
+
+        # 5. Check if the query is an OS/desktop tool command (e.g. apps, bluetooth, wifi, files)
+        p_lower = resolved_prompt.lower().strip()
+        # Disambiguate inquiries (questions) from imperative commands
+        is_inquiry = (
+            any(p_lower.startswith(q) for q in (
+                "how to ", "how do ", "how can ", "what is ", "what are ",
+                "why is ", "why does ", "why did ", "where is ", "where are ",
+                "can you explain ", "explain "
+            )) or p_lower.endswith("?")
+        ) and not any(p_lower.startswith(imp) for imp in (
+            "can you open ", "could you open ", "please open ",
+            "can you search ", "could you search ", "please search ",
+            "can you find ", "could you find ", "please find ",
+            "can you run ", "could you run ", "please run ",
+            "can you launch ", "could you launch ", "please launch ",
+            "can you turn ", "could you turn ", "please turn "
+        ))
+
+        routed = default_router.route(resolved_prompt) if not is_inquiry else None
+        imperative_keywords = ("open ", "launch ", "click ", "type ", "start ", "close ", "kill ", "focus ", "switch to ", "find files", "list files", "mute ", "unmute ", "turn off ", "turn on ")
+        is_tool_action = (not is_inquiry) and ((routed is not None) or any(p_lower.startswith(k) or f" {k}" in p_lower for k in imperative_keywords))
 
         if is_tool_action:
             # Run through Brain autonomous execution planner
@@ -144,7 +200,7 @@ class BrainAppCore:
                 "confidence": 1.0,
             }
 
-        # 4. Check if query requires real-time factual web grounding
+        # 6. Check if query requires real-time factual web grounding
         freshness_triggers = (
             "who is president", "who is the president", "who is prime minister",
             "who is the prime minister", "current price", "latest news", "who won",
