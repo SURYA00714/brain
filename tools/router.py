@@ -513,8 +513,9 @@ class FastRouter:
         if m_univ_nav:
             raw_site = m_univ_nav.group(1).strip()
             raw_q = m_univ_nav.group(2).strip()
-            target_url = raw_site if raw_site.startswith(("http://", "https://")) else f"https://{raw_site}"
-            return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": target_url}}
+            if raw_site.lower() not in ("brave", "chrome", "firefox", "browser", "edge", "safari", "terminal", "app"):
+                target_url = raw_site if raw_site.startswith(("http://", "https://")) else f"https://{raw_site}"
+                return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": raw_q, "url": target_url}}
 
         # "enter [this query] <query> into [the] [current website's] search box/input/bar"
         m_enter = re.match(r"^(?:can you\s+|could you\s+|please\s+)?enter\s+(?:this\s+query|query|the\s+query)?\s*(.+?)\s+into\s+(?:the\s+)?(?:current\s+website(?:'s)?\s+|active\s+page(?:'s)?\s+|this\s+website(?:'s)?\s+)?search\s*(?:box|input|field|bar)$", norm_text, flags=re.IGNORECASE)

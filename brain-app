@@ -6,7 +6,8 @@
 # Strictly local intelligence — No Yui or Aoi companion/avatar dependencies.
 # ==============================================================================
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+DIR="$( cd "$( dirname "$SCRIPT_PATH" )" && pwd )"
 cd "$DIR"
 
 # 1. Direct one-shot prompt execution: brain-app "query"
