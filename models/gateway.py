@@ -59,7 +59,7 @@ class GroqProvider:
         key = self.api_key if self.api_key is not None else os.environ.get("GROQ_API_KEY", "")
         return bool(key and key.strip())
 
-    def generate(self, prompt: str, timeout: float = 30.0, system_prompt: Optional[str] = None) -> ModelResponse:
+    def generate(self, prompt: str, timeout: float = 30.0, system_prompt: Optional[str] = None, format: Optional[Any] = None) -> ModelResponse:
         key = self.api_key if self.api_key is not None else os.environ.get("GROQ_API_KEY", "")
         if not key:
             return ModelResponse(
@@ -85,6 +85,8 @@ class GroqProvider:
             "messages": messages,
             "temperature": 0.2
         }
+        if format == "json" or isinstance(format, dict):
+            payload["response_format"] = {"type": "json_object"}
 
         try:
             resp = requests.post(self.base_url, headers=headers, json=payload, timeout=timeout)
@@ -255,7 +257,8 @@ class OllamaProvider:
         think: bool = False,
         num_ctx: int = 2048,
         num_predict: int = 384,
-        num_thread: Optional[int] = None
+        num_thread: Optional[int] = None,
+        format: Optional[Any] = None
     ) -> ModelResponse:
         start = time.perf_counter()
         url = f"{self.base_url}/api/chat"
@@ -281,6 +284,8 @@ class OllamaProvider:
             "keep_alive": "5m",
             "options": options
         }
+        if format is not None:
+            payload["format"] = format
 
         try:
             with self._inference_lock:
@@ -452,7 +457,8 @@ class ModelGateway:
         think: bool = False,
         num_predict: int = 384,
         image_path: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None
+        tools: Optional[List[Dict[str, Any]]] = None,
+        format: Optional[Any] = None
     ) -> ModelResponse:
         if image_path:
             if not self.providers["gemini"].is_available():
@@ -477,7 +483,8 @@ class ModelGateway:
                 timeout=timeout,
                 system_prompt=system_prompt,
                 think=think,
-                num_predict=num_predict
+                num_predict=num_predict,
+                format=format
             )
 
         # Privacy guard: never send sensitive data to cloud in AUTO mode
@@ -487,7 +494,8 @@ class ModelGateway:
                 timeout=timeout,
                 system_prompt=system_prompt,
                 think=think,
-                num_predict=num_predict
+                num_predict=num_predict,
+                format=format
             )
 
         # Handle DEEP tier (routes preferentially to Gemini if available)
@@ -506,19 +514,22 @@ class ModelGateway:
         gemini_avail = self.providers["gemini"].is_available()
 
         if not groq_avail and not gemini_avail:
-            return ModelResponse(
-                success=False,
-                error="No cloud models configured (set GROQ_API_KEY or GEMINI_API_KEY).",
-                provider="none",
-                model="none",
-                cloud_attempted=False
+            # If no cloud providers configured, fall directly to Local Ollama
+            return self.providers["ollama"].generate(
+                prompt=prompt,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                think=think,
+                num_predict=num_predict,
+                format=format
             )
 
         # 1. Try Groq (Primary Cloud)
         groq_resp = self.providers["groq"].generate(
             prompt=prompt,
             timeout=timeout,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            format=format
         )
         groq_resp.cloud_attempted = True
         if groq_resp.success:
@@ -552,7 +563,9 @@ class ModelGateway:
             prompt=prompt,
             timeout=timeout,
             system_prompt=system_prompt,
-            think=think
+            think=think,
+            num_predict=num_predict,
+            format=format
         )
         if ollama_resp.success:
             ollama_resp.fallback_used = True

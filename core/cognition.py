@@ -46,6 +46,34 @@ class EpistemicStatus(Enum):
     UNKNOWN = "UNKNOWN"
 
 
+PLAN_JSON_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "goal": {"type": "string"},
+        "intent": {"type": "string"},
+        "steps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "step_id": {"type": "integer"},
+                    "description": {"type": "string"},
+                    "tool": {"type": "string"},
+                    "parameters": {"type": "object"},
+                    "depends_on": {"type": "array", "items": {"type": "integer"}},
+                    "expected_result": {"type": "string"}
+                },
+                "required": ["step_id", "tool", "parameters", "depends_on"]
+            }
+        },
+        "completion_criteria": {"type": "array", "items": {"type": "string"}},
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "status": {"type": "string"}
+    },
+    "required": ["goal", "steps", "status"]
+}
+
+
 class CognitiveEngine:
     """
     Intelligent Autonomous Cognitive Architecture for Brain.
@@ -1169,7 +1197,8 @@ class CognitiveEngine:
                 tier=effective_tier,
                 timeout=70.0,
                 think=False,
-                num_predict=token_budget
+                num_predict=token_budget,
+                format=PLAN_JSON_SCHEMA
             )
             self.last_planning_response = resp
 
