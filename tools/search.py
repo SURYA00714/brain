@@ -1,10 +1,123 @@
 import ipaddress
+import os
 import re
 import requests
 from html.parser import HTMLParser
 from html import unescape
 from typing import Tuple, Optional, Any, Dict, List
 from urllib.parse import urlparse, parse_qs, unquote
+
+
+SEARXNG_DEFAULT_URL = "http://127.0.0.1:8080"
+
+
+def query_searxng(query: str, max_results: int = 3, base_url: Optional[str] = None) -> Optional[List[Dict[str, str]]]:
+    """
+    Queries SearXNG metasearch engine JSON API.
+    Aggregates multi-engine search results from Google, Bing, DuckDuckGo, Brave, Reddit, etc.
+    Returns normalized clean results or None if SearXNG is unreachable.
+    """
+    clean_q = query.strip() if query else ""
+    if not clean_q:
+        return None
+
+    active_base = base_url or os.environ.get("SEARXNG_URL", SEARXNG_DEFAULT_URL)
+    target_url = active_base.rstrip("/") + "/search"
+    params = {
+        "q": clean_q,
+        "format": "json",
+        "safesearch": 0,
+        "language": "en"
+    }
+    headers = {
+        "User-Agent": "Brain-AI-Agent/2.0 (Linux; x86_64) Non-Intrusive Research Client"
+    }
+    try:
+        resp = requests.get(target_url, params=params, headers=headers, timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_results = data.get("results", [])
+            clean_results = []
+            for r in raw_results:
+                link = clean_url(r.get("url") or "")
+                title = (r.get("title") or "").strip()
+                snippet = (r.get("content") or "").strip()
+                if link and (title or snippet):
+                    clean_results.append({
+                        "title": title,
+                        "url": link,
+                        "snippet": snippet,
+                        "engine": r.get("engine", "searxng")
+                    })
+                if len(clean_results) >= max_results:
+                    break
+            if clean_results:
+                return clean_results
+    except Exception:
+        pass
+    return None
+
+
+def query_ddg_instant_answer(query: str, max_results: int = 3) -> Optional[List[Dict[str, str]]]:
+    """Fallback: Queries DuckDuckGo Instant Answer JSON API."""
+    try:
+        url = "https://api.duckduckgo.com/"
+        params = {"q": query, "format": "json", "no_html": 1, "skip_disambig": 0}
+        headers = {"User-Agent": "Brain-AI-Agent/2.0"}
+        resp = requests.get(url, params=params, headers=headers, timeout=4)
+        if resp.status_code in (200, 202):
+            data = resp.json()
+            results = []
+            if data.get("AbstractText") and data.get("AbstractURL"):
+                results.append({
+                    "title": data.get("Heading") or query,
+                    "url": data["AbstractURL"],
+                    "snippet": data["AbstractText"],
+                    "engine": "ddg_instant"
+                })
+            for topic in data.get("RelatedTopics", []):
+                if isinstance(topic, dict) and topic.get("Text") and topic.get("FirstURL"):
+                    results.append({
+                        "title": topic.get("Text", "").split(" - ")[0],
+                        "url": topic["FirstURL"],
+                        "snippet": topic["Text"],
+                        "engine": "ddg_related"
+                    })
+                if len(results) >= max_results:
+                    break
+            if results:
+                return results
+    except Exception:
+        pass
+    return None
+
+
+def query_wikipedia(query: str, max_results: int = 3) -> Optional[List[Dict[str, str]]]:
+    """Fallback: Queries Wikipedia OpenSearch API."""
+    try:
+        url = "https://en.wikipedia.org/w/api.php"
+        params = {"action": "opensearch", "search": query, "limit": max_results, "format": "json"}
+        headers = {"User-Agent": "Brain-AI-Agent/2.0"}
+        resp = requests.get(url, params=params, headers=headers, timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            if len(data) >= 4:
+                titles = data[1]
+                descriptions = data[2]
+                urls = data[3]
+                results = []
+                for t, d, u in zip(titles, descriptions, urls):
+                    results.append({
+                        "title": t,
+                        "url": u,
+                        "snippet": d if d else t,
+                        "engine": "wikipedia"
+                    })
+                if results:
+                    return results
+    except Exception:
+        pass
+    return None
 
 
 def clean_url(raw_url):
@@ -110,7 +223,18 @@ def perform_web_search_structured(query, max_results=3):
             "status": "ERROR_EMPTY_QUERY"
         }
 
-    # Try mature duckduckgo_search / ddgs library first
+    # 1. Try SearXNG multi-engine metasearch first (fast JSON API, 70+ engines, zero scraping fragility)
+    searx_res = query_searxng(clean_query, max_results=max_results)
+    if searx_res:
+        return {
+            "success": True,
+            "query": clean_query,
+            "results": searx_res,
+            "provider": "searxng",
+            "status": "COMPLETED"
+        }
+
+    # 2. Try mature duckduckgo_search / ddgs library as fallback
     try:
         import warnings
         with warnings.catch_warnings():
@@ -150,9 +274,31 @@ def perform_web_search_structured(query, max_results=3):
                     "status": "COMPLETED"
                 }
     except Exception:
-        pass  # Fall back to HTML parser below
+        pass  # Fall back below
 
-    # Fallback to internal DDGHTMLParser
+    # 3. Try DuckDuckGo Instant Answer API fallback
+    ddg_res = query_ddg_instant_answer(clean_query, max_results=max_results)
+    if ddg_res:
+        return {
+            "success": True,
+            "query": clean_query,
+            "results": ddg_res,
+            "provider": "duckduckgo_api",
+            "status": "COMPLETED"
+        }
+
+    # 4. Try Wikipedia Knowledge OpenSearch API fallback
+    wiki_res = query_wikipedia(clean_query, max_results=max_results)
+    if wiki_res:
+        return {
+            "success": True,
+            "query": clean_query,
+            "results": wiki_res,
+            "provider": "wikipedia_api",
+            "status": "COMPLETED"
+        }
+
+    # 5. Fallback to internal DDGHTMLParser
     url = "https://html.duckduckgo.com/html/"
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

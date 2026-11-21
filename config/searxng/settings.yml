@@ -1,0 +1,13 @@
+use_default_settings: true
+server:
+  secret_key: "brain_searxng_secret_key_ultra_secure_local"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: false
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json
