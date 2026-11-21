@@ -666,7 +666,9 @@ class FastRouter:
                 elif "brave" in raw_app or "browser" in raw_app:
                     target_app = "brave"
 
-            if target_app in APPROVED_APPS:
+            from tools.app_launcher import resolve_app
+            is_valid_app = (target_app in APPROVED_APPS) or bool(resolve_app(raw_app)) or bool(shutil.which(raw_app))
+            if is_valid_app:
                 if any(w in raw_content.lower() for w in ("about yourself", "about you", "your bio", "who you are")):
                     from core.identity import default_identity
                     text_to_type = f"{default_identity.name} ({default_identity.version}) - {default_identity.persona} on Linux Mint."

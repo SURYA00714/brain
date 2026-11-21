@@ -5,10 +5,10 @@ import subprocess
 import time
 
 APPROVED_APPS = {
-    "brave": ["brave-browser"],
-    "terminal": ["xfce4-terminal", "x-terminal-emulator"],
-    "file_manager": ["thunar"],
-    "text_editor": ["xedit", "x-text-editor", "nano"],
+    "brave": ["brave-browser", "brave-browser-stable", "google-chrome", "chromium", "firefox"],
+    "terminal": ["xfce4-terminal", "x-terminal-emulator", "uxterm", "xterm"],
+    "file_manager": ["thunar", "nautilus"],
+    "text_editor": ["codium", "mousepad", "xed", "xedit", "onlyoffice-desktopeditors", "nano"],
     "calculator": ["gnome-calculator", "galculator", "xcalc"]
 }
 
@@ -358,7 +358,16 @@ def open_app(app_name):
     clean_name = normalize_app_name(app_name)
 
     if clean_name not in APPROVED_APPS:
-        return f"Error: Application '{app_name}' is not in the approved safety allowlist."
+        # Fallback to system application launcher for any installed desktop application
+        try:
+            from tools.app_launcher import launch_app
+            launch_res = launch_app(app_name)
+            if launch_res.get("success"):
+                app_title = launch_res.get("app", app_name)
+                return f"Application '{app_title}' opened successfully."
+        except Exception:
+            pass
+        return f"Error: Application '{app_name}' is not in the approved safety allowlist or not found on system."
 
     # Situational Awareness check: if already running, focus and report ready rather than spawning redundant process
     if default_app_tracker.is_running(clean_name) or (not os.environ.get("BRAIN_MOCK_GUI") and is_window_open(clean_name)):
@@ -412,9 +421,6 @@ def close_app(app_name):
         return "Error: Invalid application name specified."
 
     clean_name = normalize_app_name(app_name)
-    if clean_name not in APPROVED_APPS:
-        return f"Error: Application '{app_name}' is not in the approved safety allowlist."
-
     return default_app_tracker.close_app(clean_name)
 
 
@@ -427,17 +433,17 @@ def focus_app(app_name):
         return "Error: Invalid application name specified."
 
     clean_name = normalize_app_name(app_name)
-    if clean_name not in APPROVED_APPS:
-        return f"Error: Application '{app_name}' is not in the approved safety allowlist."
 
     # Map app_name to window title search term
     title_terms = {
         "brave": "Brave",
         "file_manager": "thunar",
         "terminal": "Terminal",
-        "text_editor": "Text Editor"
+        "text_editor": "Text Editor",
+        "calculator": "Calculator",
+        "codium": "VSCodium"
     }
-    term = title_terms.get(clean_name, clean_name)
+    term = title_terms.get(clean_name, app_name)
 
     focused = False
     # Attempt wmctrl focus

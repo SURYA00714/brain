@@ -169,15 +169,16 @@ def resolve_app(name: str) -> Optional[Any]:
     # Alias mappings for canonical desktop app requests
     canonical_aliases = {
         "brave": ["brave-browser.desktop", "brave.desktop"],
-        "browser": ["brave-browser.desktop", "brave.desktop"],
-        "terminal": ["xfce4-terminal.desktop", "org.gnome.Terminal.desktop", "x-terminal-emulator.desktop"],
+        "browser": ["brave-browser.desktop", "google-chrome.desktop", "chromium.desktop", "firefox.desktop", "brave.desktop"],
+        "terminal": ["xfce4-terminal.desktop", "org.gnome.Terminal.desktop", "x-terminal-emulator.desktop", "debian-uxterm.desktop"],
         "console": ["xfce4-terminal.desktop", "org.gnome.Terminal.desktop"],
         "file_manager": ["thunar.desktop", "org.gnome.Nautilus.desktop"],
         "file manager": ["thunar.desktop", "org.gnome.Nautilus.desktop"],
         "files": ["thunar.desktop", "org.gnome.Nautilus.desktop"],
-        "text_editor": ["mousepad.desktop", "xed.desktop", "xedit.desktop"],
-        "text editor": ["mousepad.desktop", "xed.desktop", "xedit.desktop"],
-        "calculator": ["gnome-calculator.desktop", "galculator.desktop", "xcalc.desktop"]
+        "text_editor": ["codium.desktop", "mousepad.desktop", "xed.desktop", "xedit.desktop", "onlyoffice-desktopeditors.desktop"],
+        "text editor": ["codium.desktop", "mousepad.desktop", "xed.desktop", "xedit.desktop", "onlyoffice-desktopeditors.desktop"],
+        "editor": ["codium.desktop", "mousepad.desktop", "xed.desktop", "xedit.desktop", "onlyoffice-desktopeditors.desktop"],
+        "calculator": ["org.gnome.Calculator.desktop", "gnome-calculator.desktop", "galculator.desktop", "xcalc.desktop"]
     }
 
     if lowered_query in canonical_aliases:
