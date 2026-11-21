@@ -51,10 +51,10 @@ APP_CAPABILITIES = {
     ),
     "text_editor": AppCapability(
         "text_editor",
-        ["text_editor", "editor", "xedit", "mousepad", "xed", "nano"],
-        ["xedit", "x-text-editor", "mousepad", "xed"],
-        ["xedit", "mousepad", "xed"],
-        ["editor", "mousepad", "xed", "xedit"],
+        ["text_editor", "editor", "xedit", "mousepad", "xed", "nano", "codium", "vscodium", "vscode", "onlyoffice"],
+        ["codium", "xedit", "x-text-editor", "mousepad", "xed", "onlyoffice-desktopeditors", "nano"],
+        ["codium", "vscodium", "code", "xedit", "mousepad", "xed", "onlyoffice"],
+        ["codium", "vscodium", "code", "editor", "mousepad", "xed", "xedit", "onlyoffice"],
         ["process", "window", "wmctrl"]
     ),
     "calculator": AppCapability(

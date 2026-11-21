@@ -457,6 +457,12 @@ class MemoryStore:
                 scored.append(rec)
 
             scored.sort(key=lambda r: (r.relevance_score, r.updated_at), reverse=True)
+            if not scored and any(w in clean_q for w in ("remember", "told", "said", "recall", "stored", "saved")):
+                fallback_cursor = self._conn.execute(
+                    "SELECT id, memory_type, subject, key, value, confidence, source, created_at, updated_at, access_count, ttl_seconds, verified FROM memories ORDER BY updated_at DESC LIMIT ?",
+                    (limit,)
+                )
+                return [self._row_to_record(r) for r in fallback_cursor.fetchall()]
             return scored[:limit]
         except Exception:
             return []

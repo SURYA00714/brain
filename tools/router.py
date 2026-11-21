@@ -321,7 +321,7 @@ class FastRouter:
             "what was our last conversation", "what was the last topic",
             "what did i just say", "what did i tell you"
         }
-        if norm_text in recent_talk_queries or "last thing we talked about" in norm_text or "what did i tell you" in norm_text:
+        if ((norm_text in recent_talk_queries or "last thing we talked about" in norm_text) and "remember" not in norm_text):
             from core.context import default_short_term_memory
             last_query = default_short_term_memory.get_last_query()
             if last_query:
@@ -435,6 +435,29 @@ class FastRouter:
         if m_recall_match:
             recall_target = m_recall_match.group(1).strip()
         else:
+            # Check general recall query without specific target: e.g. "what i told you to remember", "what did i tell you to remember", "what did i tell you"
+            m_recall_all = re.match(
+                r"^(?:what\s+(?:did\s+)?i\s+(?:tell\s+you|told\s+you|asked\s+you|say)\s*(?:to\s+remember|earlier|before)?|what\s+i\s+told\s+you\s*(?:to\s+remember)?)\??$",
+                norm_text,
+                flags=re.IGNORECASE
+            )
+            if m_recall_all or norm_text in {
+                "what i told you to remember", "what did i tell you to remember",
+                "what did i tell you", "what i asked you to remember", "what i told you"
+            }:
+                from core.memory import default_memory
+                mems = default_memory.search_memories("remember", limit=5)
+                if mems:
+                    items = [f"- {m.key.replace('_', ' ').title()}: {m.value}" for m in mems]
+                    return {
+                        "type": "final",
+                        "answer": "Here is what you told me to remember:\n" + "\n".join(items)
+                    }
+                return {
+                    "type": "final",
+                    "answer": "I do not have anything recorded in memory yet."
+                }
+
             m_recall_general = re.match(
                 r"^(?:can you\s+|could you\s+|please\s+)?(?:what\s+is|what\s+was|what(?:\'s|s)|tell\s+me|recall|do\s+you\s+remember)(?:\s+(?:about|the|my))?\s+([a-zA-Z0-9_\s]+?)(?:\s+(?:i told you|i said|i mentioned|to remember|earlier|before))*\??$",
                 norm_text,

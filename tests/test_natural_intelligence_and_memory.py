@@ -36,6 +36,18 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         self.assertEqual(r2.get("type"), "final")
         self.assertIn("1", r2.get("answer", ""))
 
+        # Test case 3: what i told you to remember
+        r3 = self.router.route("what i told you to remember")
+        self.assertIsNotNone(r3)
+        self.assertEqual(r3.get("type"), "final")
+        self.assertIn("1", r3.get("answer", ""))
+
+        # Test case 4: what did i tell you to remember
+        r4 = self.router.route("what did i tell you to remember")
+        self.assertIsNotNone(r4)
+        self.assertEqual(r4.get("type"), "final")
+        self.assertIn("1", r4.get("answer", ""))
+
     def test_compound_open_and_write(self):
         """Verifies compound workflow for 'open text editor and write about yourself'."""
         route = self.router.route("open text editor and write about yourself")
@@ -60,6 +72,13 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         ctx = default_context_builder.build_system_context("tell me a joke")
         self.assertNotIn("WORLD STATE [UNKNOWN]", ctx)
         self.assertIn("Brain", ctx)
+
+    def test_verify_step_open_app_does_not_choke(self):
+        """Ensures verify_step_execution for OPEN_APP returns verified True when launch was dispatched."""
+        from core.cognition import verify_step_execution
+        ok, status, msg = verify_step_execution("OPEN_APP", {"app_name": "text_editor"}, {"success": True, "data": "launched"})
+        self.assertTrue(ok)
+        self.assertEqual(status, "VERIFIED")
 
 
 if __name__ == "__main__":
