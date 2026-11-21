@@ -297,9 +297,11 @@ class ContextBuilder:
         identity_snip = self.identity_mgr.get_identity_prompt_snippet()
         sections.append(identity_snip)
 
-        # 2. Verified World State
+        # 2. Verified World State (omit UNKNOWN state during pure conversational/creative prompts)
+        is_conversational = any(kw in user_request.lower() for kw in ("joke", "meaning of life", "poem", "story", "riddle", "philosophy", "how are you", "who are you", "hello", "hi", "hey"))
         world_snip = self.world_state_mgr.get_state_prompt_snippet()
-        sections.append(world_snip)
+        if not is_conversational or "Active Application: none" not in world_snip:
+            sections.append(world_snip)
 
         # 3. Short-Term Conversation Context
         short_term_snip = self.short_term_mem.get_context_snippet()
@@ -314,14 +316,14 @@ class ContextBuilder:
                 memories.sort(key=lambda m: (bool(getattr(m, "verified", True)), getattr(m, "relevance_score", 0.0), m.updated_at), reverse=True)
                 seen_pairs = set()
                 key_values: Dict[str, set] = {}
-                mem_lines = ["RELEVANT MEMORIES:"]
+                mem_lines = ["USER FACTS & STORED CONTEXT:"]
                 for m in memories[:3]:
                     pair = (m.key.lower(), m.value.strip().lower())
                     if pair in seen_pairs:
                         continue
                     seen_pairs.add(pair)
                     key_values.setdefault(m.key.lower(), set()).add(m.value.strip())
-                    mem_lines.append(f"- [{m.memory_type}] {m.key}: {m.value}")
+                    mem_lines.append(f"- The user previously told you {m.key}: {m.value}")
                 for k, vals in key_values.items():
                     if len(vals) > 1:
                         mem_lines.append(f"- [CONFLICT] Multiple values for '{k}': {', '.join(sorted(vals))}")

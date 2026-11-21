@@ -8,6 +8,7 @@
     "System Hardware (Wi-Fi, Bluetooth, Audio Volume, Screen Brightness, Screenshots, Telemetry)",
     "Live Web Research via Brave / DuckDuckGo",
     "Persistent Memory & Dialogue History across sessions",
+    "Multi-step compound task planning and execution in a single request (e.g. 'open app and write note', 'open site and search')",
     "Autonomous Task Planning and deterministic tool execution"
   ],
   "limitations": [

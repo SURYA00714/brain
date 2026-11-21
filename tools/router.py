@@ -83,6 +83,12 @@ class FastRouter:
                 "answer": "Yes. I have live internet access and can perform real-time web searches, fetch and read web pages, and conduct deep multi-source research using tools like WEB_SEARCH, READ_WEB_PAGE, and DEEP_RESEARCH."
             }
 
+        if re.search(r"\bcan you (?:do|handle|perform|execute) (?:multiple|several|compound|chained|more than one) (?:tasks?|actions?|commands?|things?)\b", norm_text):
+            return {
+                "type": "final",
+                "answer": "Yes! I can plan and execute multi-step compound workflows in a single input (e.g. 'open text editor and write note', 'open youtube and search video', or chained system controls)."
+            }
+
         identity_queries = {
             "who are you", "who are you?", "what are you", "what are you?",
             "what is your name", "what's your name", "who made you",
@@ -382,20 +388,29 @@ class FastRouter:
         if norm_text in time_queries:
             return {"type": "tool", "tool": "TIME", "arguments": {}}
 
-        # 2b. Deterministic Memory Storage Queries (e.g. "remember that I prefer Python", "remember that my browser is Brave")
+        # 2b. Deterministic Memory Storage Queries (e.g. "remember the number 1, i will ask later", "remember that my browser is Brave")
         for prefix in ["remember that ", "remember "]:
             if norm_text.startswith(prefix):
                 content = clean_text[len(prefix):].strip()
                 if content:
+                    # Clean trailing follow-up instructions like ", i will ask later", ", for later", etc.
+                    cleaned_content = re.sub(r",\s*(?:i\s+will|i\'ll|for|please|remember|ask|later|when\s+i).*$", "", content, flags=re.IGNORECASE).strip()
                     is_pref = any(w in norm_text for w in ["prefer", "favorite", "like", "love", "hate", "dislike"])
-                    key_val = content
+
                     m_key = "user_preference" if is_pref else "fact"
-                    if " is " in content:
-                        parts = content.split(" is ", 1)
+                    key_val = cleaned_content
+
+                    # Check for explicit named entities (e.g. "the number 1", "pin 1234", "code ABC")
+                    m_entity = re.match(r"^(?:the\s+)?(number|value|pin|code|digit|secret|word|password)\s+(.+)$", cleaned_content, flags=re.IGNORECASE)
+                    if m_entity:
+                        m_key = m_entity.group(1).lower().strip()
+                        key_val = m_entity.group(2).strip()
+                    elif " is " in cleaned_content:
+                        parts = cleaned_content.split(" is ", 1)
                         m_key = parts[0].strip().replace(" ", "_").lower()
                         key_val = parts[1].strip()
-                    elif " prefers " in content:
-                        parts = content.split(" prefers ", 1)
+                    elif " prefers " in cleaned_content:
+                        parts = cleaned_content.split(" prefers ", 1)
                         m_key = "preferred_choice"
                         key_val = parts[1].strip()
 
@@ -410,7 +425,41 @@ class FastRouter:
                         }
                     }
 
-        # 2c. Memory Retrieval / Preference Recall Queries
+        # 2c. Memory Retrieval / Entity & Preference Recall Queries
+        # e.g. "whats the number i told you", "i told you to remember a number whats it?", "recall my preference"
+        m_recall_pattern = (
+            r"^i told you to remember (?:a |the )?([a-zA-Z0-9_\s]+?)(?:,?\s*what(?:\'s|s| is) (?:it|that|the number))?\??$"
+        )
+        m_recall_match = re.match(m_recall_pattern, norm_text, flags=re.IGNORECASE)
+        recall_target = None
+        if m_recall_match:
+            recall_target = m_recall_match.group(1).strip()
+        else:
+            m_recall_general = re.match(
+                r"^(?:can you\s+|could you\s+|please\s+)?(?:what\s+is|what\s+was|what(?:\'s|s)|tell\s+me|recall|do\s+you\s+remember)(?:\s+(?:about|the|my))?\s+([a-zA-Z0-9_\s]+?)(?:\s+(?:i told you|i said|i mentioned|to remember|earlier|before))*\??$",
+                norm_text,
+                flags=re.IGNORECASE
+            )
+            if m_recall_general:
+                t = m_recall_general.group(1).strip()
+                t = re.sub(r"\s+i\s+(?:told\s+you|said|mentioned).*$", "", t).strip()
+                # Skip general non-memory question words
+                if t and t not in ("meaning of life", "time", "date", "weather", "your name", "brain", "this", "that", "status"):
+                    recall_target = t
+
+        if recall_target:
+            from core.memory import default_memory
+            clean_target = recall_target.replace(" ", "_").lower()
+            mems = default_memory.search_memories(clean_target, limit=3)
+            if not mems:
+                mems = default_memory.search_memories(recall_target, limit=3)
+            if mems:
+                best = mems[0]
+                return {
+                    "type": "final",
+                    "answer": f"The {recall_target} you told me to remember is {best.value}."
+                }
+
         recall_preference_queries = {
             "what do you remember about my preference",
             "what do you remember about my preferences",
@@ -599,6 +648,36 @@ class FastRouter:
                 plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_WINDOW", arguments={"target": app_target}, expected_outcome=f"{app_target} focused", description=f"Focus {app_target} window"))
                 plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="MAXIMIZE_WINDOW", arguments={"target": app_target}, expected_outcome=f"{app_target} maximized", description=f"Maximize {app_target} window"))
                 plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened and maximized {app_target}."))
+                return {"type": "plan", "plan": plan}
+
+        # 3a-2b. Open <app> and write/type <content> (e.g. "open text editor and write about yourself", "open terminal and type ls")
+        m_open_write = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|launch|start)\s+(.+?)\s+and\s+(?:write|type|enter)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+        if m_open_write:
+            raw_app = m_open_write.group(1).strip().lower()
+            raw_content = m_open_write.group(2).strip()
+
+            from tools.apps import normalize_app_name, APPROVED_APPS
+            target_app = normalize_app_name(raw_app)
+            if target_app not in APPROVED_APPS:
+                if "text" in raw_app or "editor" in raw_app or "notepad" in raw_app:
+                    target_app = "text_editor"
+                elif "term" in raw_app or "console" in raw_app:
+                    target_app = "terminal"
+                elif "brave" in raw_app or "browser" in raw_app:
+                    target_app = "brave"
+
+            if target_app in APPROVED_APPS:
+                if any(w in raw_content.lower() for w in ("about yourself", "about you", "your bio", "who you are")):
+                    from core.identity import default_identity
+                    text_to_type = f"{default_identity.name} ({default_identity.version}) - {default_identity.persona} on Linux Mint."
+                else:
+                    text_to_type = raw_content.strip("\"'")
+
+                plan = ExecutionPlan(goal=clean_text)
+                plan.add_step(ExecutionStep(step_id=1, action_type="tool", tool_name="OPEN_APP", arguments={"app_name": target_app}, expected_outcome=f"{target_app} open", verification_method="app_running", description=f"Open {target_app}"))
+                plan.add_step(ExecutionStep(step_id=2, depends_on=[1], action_type="tool", tool_name="FOCUS_APP", arguments={"app_name": target_app}, expected_outcome=f"{target_app} focused", verification_method="focus", description=f"Focus {target_app} window"))
+                plan.add_step(ExecutionStep(step_id=3, depends_on=[2], action_type="tool", tool_name="TYPE_TEXT", arguments={"text": text_to_type}, expected_outcome="Text entered", verification_method="none", description=f"Write text"))
+                plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {target_app} and wrote: '{text_to_type}'."))
                 return {"type": "plan", "plan": plan}
 
         # 3a-3. Open Brave and go to / navigate to / open <target>

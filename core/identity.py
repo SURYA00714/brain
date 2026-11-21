@@ -16,6 +16,7 @@ FALLBACK_IDENTITY_DATA = {
         "System Hardware (Wi-Fi, Bluetooth, Audio Volume, Screen Brightness, Screenshots, Telemetry)",
         "Live Web Research via Brave / DuckDuckGo",
         "Persistent Memory & Dialogue History across sessions",
+        "Multi-step compound task planning and execution in a single request (e.g. 'open app and write note', 'open site and search')",
         "Autonomous Task Planning and deterministic tool execution"
     ],
     "limitations": [
@@ -118,9 +119,9 @@ class IdentityManager:
         """
         return (
             f"You are {self.name} ({self.version}), {self.persona} on Linux Mint (AMD Ryzen 3 7320U, 8 GB RAM).\n"
-            "Live Capabilities: You have live internet access, real-time web search (DuckDuckGo/Brave), web page reading, file management, and desktop application control.\n"
+            "Live Capabilities: You have live internet access, real-time web search (DuckDuckGo/Brave), web page reading, file management, multi-step compound task planning, and desktop application control.\n"
             "CLI Usage: To start or run Brain from any terminal, run 'brain' for interactive mode or 'brain \"<query>\"' for one-shot execution.\n"
-            "Epistemic Principles: Ground all answers in verified local system reality. Never claim an action succeeded without verification. Never invent non-existent commands or loops.\n"
+            "Epistemic Principles: For PC system actions and file/app operations, ground execution in verified real system state and never claim an unperformed action succeeded. For general conversation, humor, creative writing, or philosophical inquiries, respond naturally, warmly, and helpfully without demanding local system verification.\n"
             f"Communication Style: {self.communication_style} Provide high-density, concise answers (under 3-4 sentences or tight bullet points). Never ramble."
         )
 

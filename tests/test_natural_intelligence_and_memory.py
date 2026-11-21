@@ -1,0 +1,66 @@
+import os
+import unittest
+from tools.router import FastRouter
+from core.context import default_context_builder
+from core.memory import default_memory
+
+
+class TestNaturalIntelligenceAndMemory(unittest.TestCase):
+    """Tests for conversational naturalness, entity memory extraction, and compound execution."""
+
+    def setUp(self):
+        self.router = FastRouter()
+
+    def test_remember_entity_extraction(self):
+        """Verifies entity extraction from 'remember the number 1, i will ask later'."""
+        route = self.router.route("remember the number 1, i will ask later")
+        self.assertEqual(route.get("type"), "tool")
+        self.assertEqual(route.get("tool"), "REMEMBER")
+        args = route.get("arguments", {})
+        self.assertEqual(args.get("key"), "number")
+        self.assertEqual(args.get("value"), "1")
+
+    def test_recall_queries(self):
+        """Verifies deterministic recall for remembered facts."""
+        default_memory.add_memory(memory_type="FACT", subject="user", key="number", value="1")
+
+        # Test case 1: whats the number i told you
+        r1 = self.router.route("whats the number i told you")
+        self.assertIsNotNone(r1)
+        self.assertEqual(r1.get("type"), "final")
+        self.assertIn("1", r1.get("answer", ""))
+
+        # Test case 2: i told you to remember a number whats it?
+        r2 = self.router.route("i told you to remember a number whats it?")
+        self.assertIsNotNone(r2)
+        self.assertEqual(r2.get("type"), "final")
+        self.assertIn("1", r2.get("answer", ""))
+
+    def test_compound_open_and_write(self):
+        """Verifies compound workflow for 'open text editor and write about yourself'."""
+        route = self.router.route("open text editor and write about yourself")
+        self.assertIsNotNone(route)
+        self.assertEqual(route.get("type"), "plan")
+        plan = route.get("plan")
+        self.assertEqual(len(plan.steps), 4)
+        self.assertEqual(plan.steps[0].tool_name, "OPEN_APP")
+        self.assertEqual(plan.steps[0].arguments.get("app_name"), "text_editor")
+        self.assertEqual(plan.steps[1].tool_name, "FOCUS_APP")
+        self.assertEqual(plan.steps[2].tool_name, "TYPE_TEXT")
+
+    def test_multitask_capability(self):
+        """Verifies that asking about multi-task capabilities produces an affirmative, helpful answer."""
+        route = self.router.route("can you do multiple tasks in one input?")
+        self.assertIsNotNone(route)
+        self.assertEqual(route.get("type"), "final")
+        self.assertIn("Yes", route.get("answer", ""))
+
+    def test_conversational_context_sanitization(self):
+        """Ensures conversational queries do not inject noisy UNKNOWN world state blocks."""
+        ctx = default_context_builder.build_system_context("tell me a joke")
+        self.assertNotIn("WORLD STATE [UNKNOWN]", ctx)
+        self.assertIn("Brain", ctx)
+
+
+if __name__ == "__main__":
+    unittest.main()
