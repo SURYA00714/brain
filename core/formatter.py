@@ -115,6 +115,29 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
             return raw_res
         return f"Search results:\n{raw_res}"
 
+    if tool_upper in ("CLICK_UI_ELEMENT", "CLICK_ACCESSIBLE_ELEMENT"):
+        d = result.get("data") if isinstance(result.get("data"), dict) else result
+        elem_name = (d.get("element", {}).get("name") if isinstance(d.get("element"), dict) else "") or d.get("action_name", "element")
+        method = d.get("method", "native interaction")
+        return f"Clicked '{elem_name}' using {method}."
+
+    if tool_upper in ("TYPE_UI_ELEMENT", "TYPE_ACCESSIBLE_ELEMENT"):
+        d = result.get("data") if isinstance(result.get("data"), dict) else result
+        elem_name = d.get("element", {}).get("name") if isinstance(d.get("element"), dict) else "input"
+        text = d.get("text", "")
+        return f"Typed '{text}' into '{elem_name}'."
+
+    if tool_upper == "WAIT_FOR_UI_ELEMENT":
+        d = result.get("data") if isinstance(result.get("data"), dict) else result
+        el = d.get("elapsed_sec", 0)
+        return f"Target element confirmed ready ({el}s elapsed)."
+
+    if tool_upper in ("INSPECT_APP_UI", "INSPECT_ACCESSIBLE_TREE"):
+        d = result.get("data") if isinstance(result.get("data"), dict) else result
+        cnt = d.get("count", 0)
+        app = d.get("app_name") or d.get("app_filter") or "application"
+        return f"Inspected UI for '{app}': Found {cnt} accessible widgets."
+
     if tool_upper == "CHECK_DISK_SPACE":
         return str(result.get("data") or "Disk space checked successfully.")
 

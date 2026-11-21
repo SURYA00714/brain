@@ -1443,6 +1443,30 @@ def verify_step_execution(tool_name: str, arguments: Dict[str, Any], result: Dic
             return True, "VERIFIED", f"Webpage read verified ({len(str(content))} characters)."
         return False, "FAILED", f"Webpage read failed: {result.get('error', 'empty content')}"
 
+    # Phase 5 Desktop UI interaction tools
+    if tool_upper in ("CLICK_UI_ELEMENT", "CLICK_ACCESSIBLE_ELEMENT"):
+        if success:
+            method = result.get("method") or (data.get("method") if isinstance(data, dict) else "unknown")
+            return True, "VERIFIED", f"UI element click verified via {method}."
+        return False, "FAILED", f"UI element click failed: {err or 'Element not found'}"
+
+    if tool_upper in ("TYPE_UI_ELEMENT", "TYPE_ACCESSIBLE_ELEMENT"):
+        if success:
+            method = result.get("method") or (data.get("method") if isinstance(data, dict) else "unknown")
+            return True, "VERIFIED", f"UI element typing verified via {method}."
+        return False, "FAILED", f"UI element typing failed: {err or 'Target element not found'}"
+
+    if tool_upper == "WAIT_FOR_UI_ELEMENT":
+        found = result.get("found", False) or (isinstance(data, dict) and data.get("found", False))
+        if found:
+            return True, "VERIFIED", "Target UI element appeared and confirmed ready."
+        return False, "FAILED", f"Wait for UI element timed out: {err or 'Element not found'}"
+
+    if tool_upper in ("INSPECT_APP_UI", "INSPECT_ACCESSIBLE_TREE"):
+        if success:
+            return True, "VERIFIED", "Accessible UI tree inspected successfully."
+        return False, "FAILED", f"UI inspection failed: {err}"
+
     # General fallback: non-empty data payload
     if data is not None:
         return True, "VERIFIED", f"Execution outcome confirmed: {str(data)[:60]}"

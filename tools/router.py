@@ -407,6 +407,39 @@ class FastRouter:
                     "answer": f"Element '{target_label}' was not detected on the current screen."
                 }
 
+        # 1d-2. Phase 5 Desktop UI Interaction Routing (linux-use & AT-SPI2 stack)
+        m_inspect_ui = re.match(r"^(?:inspect|show|list)\s+(?:ui|widgets?|elements?|tree)\s+(?:of|in|on)\s+([a-zA-Z0-9_\-\.]+)$", norm_text)
+        if m_inspect_ui:
+            target_app = m_inspect_ui.group(1).strip()
+            return {"type": "tool", "tool": "INSPECT_APP_UI", "arguments": {"app_name": target_app}}
+
+        m_click_ui = re.match(
+            r"^(?:can you\s+|could you\s+|please\s+)?(?:click|press|activate)(?:\s+on|\s+the)?\s+([a-zA-Z0-9_\-\s]+?)(?:\s+(?:button|tab|menu|icon))?(?:\s+(?:in|on)\s+([a-zA-Z0-9_\-\.]+))?$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if m_click_ui:
+            elem = m_click_ui.group(1).strip()
+            app = m_click_ui.group(2).strip() if m_click_ui.group(2) else None
+            # Ignore non-UI command words
+            if elem and elem.lower() not in ("it", "this", "that", "first result", "link", "video"):
+                return {"type": "tool", "tool": "CLICK_UI_ELEMENT", "arguments": {"query": elem, "app_name": app}}
+
+        m_type_ui = re.match(
+            r"^(?:can you\s+|could you\s+|please\s+)?type\s+[\"']?(.+?)[\"']?\s+into\s+(?:the\s+)?([a-zA-Z0-9_\-\s]+?)(?:\s+(?:in|on)\s+([a-zA-Z0-9_\-\.]+))?$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if m_type_ui:
+            text_to_type = m_type_ui.group(1).strip()
+            target_field = m_type_ui.group(2).strip()
+            app = m_type_ui.group(3).strip() if m_type_ui.group(3) else None
+            return {
+                "type": "tool",
+                "tool": "TYPE_UI_ELEMENT",
+                "arguments": {"query": target_field, "text": text_to_type, "app_name": app}
+            }
+
         # 1e. Continue / Re-observe Screen (Stale Observation Refresh)
         if norm_text in {"continue", "refresh screen", "re-observe", "reobserve"}:
             from tools.screen import analyze_captured_screen

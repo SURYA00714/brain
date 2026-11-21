@@ -39,6 +39,10 @@ from tools.ui_tree import (
     inspect_accessible_tree, find_accessible_element,
     click_accessible_element, type_accessible_element
 )
+from tools.ui_driver import (
+    click_ui_element, type_ui_element,
+    wait_for_ui_element, inspect_app_ui
+)
 
 
 
@@ -725,6 +729,39 @@ default_registry.register(Tool(
     parameters={"query": "string", "text": "string", "role": "string (optional)", "app_name": "string (optional)"},
     risk_level="MEDIUM",
     func=type_accessible_element
+))
+
+# Phase 5 Autonomous Desktop UI Interaction Tools (linux-use & AT-SPI2 stack)
+default_registry.register(Tool(
+    name="CLICK_UI_ELEMENT",
+    description="Clicks an accessible desktop UI element (button, menu, checkbox) using native AT-SPI Action.DoAction with coordinate fallback.",
+    parameters={"query": "string", "role": "string (optional)", "app_name": "string (optional)"},
+    risk_level="MEDIUM",
+    func=click_ui_element
+))
+
+default_registry.register(Tool(
+    name="TYPE_UI_ELEMENT",
+    description="Types text into an accessible desktop UI input or textbox using native AT-SPI EditableText with keyboard fallback.",
+    parameters={"query": "string", "text": "string", "role": "string (optional)", "app_name": "string (optional)"},
+    risk_level="MEDIUM",
+    func=type_ui_element
+))
+
+default_registry.register(Tool(
+    name="WAIT_FOR_UI_ELEMENT",
+    description="Waits for an accessible desktop UI element or window to appear in the AT-SPI tree (event synchronization).",
+    parameters={"query": "string", "timeout_sec": "number (default: 5.0)", "app_name": "string (optional)"},
+    risk_level="LOW",
+    func=wait_for_ui_element
+))
+
+default_registry.register(Tool(
+    name="INSPECT_APP_UI",
+    description="Inspects the full hierarchical accessibility widget tree for a running desktop application.",
+    parameters={"app_name": "string", "max_depth": "integer (default: 2)"},
+    risk_level="LOW",
+    func=inspect_app_ui
 ))
 
 # Phase 9 Adaptive Capability Tools
