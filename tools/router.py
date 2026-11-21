@@ -71,8 +71,9 @@ class FastRouter:
 
         # 1b. Deterministic Identity & Capabilities (NO LLM, NO WEB SEARCH)
         internet_match = re.search(
-            r"\b(?:do\s+you\s+have|can\s+you\s+access|are\s+you\s+connected\s+to|have\s+you\s+got)\s+(?:the\s+|live\s+)?internet\s*(?:acces+)?\b|"
-            r"\b(?:can\s+you|do\s+you)\s+(?:perform\s+|do\s+)?(?:a\s+)?(?:web\s*search|search\s+the\s+web|browse\s+the\s+web|search\s+online)\b|"
+            r"\b(?:do\s+you\s+have|can\s+you\s+access|are\s+you\s+connected\s+to|have\s+you\s+got|does\s+it\s+has?)\s+(?:the\s+|live\s+)?internet\s*(?:acces+)?\b|"
+            r"\b(?:can\s+you|do\s+you|can\s+i)\s+(?:perform\s+|do\s+)?(?:a\s+)?(?:web\s*search|search\s+the\s+web|browse\s+the\s+web|search\s+online|search\s+like\s+a\s+rag\s+model)\b|"
+            r"\b(?:internet\s+as\s+(?:a\s+)?database|web\s+rag|search\s+like\s+a\s+rag\s+model)\b|"
             r"^(?:can\s+you\s+)?(?:web\s*search|search\s+web|browse\s+web|read\s+webpages?|fetch\s+urls?)\??$",
             norm_text,
             flags=re.IGNORECASE
@@ -80,7 +81,7 @@ class FastRouter:
         if internet_match:
             return {
                 "type": "final",
-                "answer": "Yes. I have live internet access and can perform real-time web searches, fetch and read web pages, and conduct deep multi-source research using tools like WEB_SEARCH, READ_WEB_PAGE, and DEEP_RESEARCH."
+                "answer": "Yes! I have live headless internet access and can operate like an internet RAG model. You can ask me to 'search internet for <topic>' or 'research <topic>' and I will fetch real-time search results and web pages, synthesize facts, and cite sources directly in the chat without disrupting your active apps or opening browser windows."
             }
 
         if re.search(r"\bcan you (?:do|handle|perform|execute) (?:multiple|several|compound|chained|more than one) (?:tasks?|actions?|commands?|things?)\b", norm_text):
@@ -1199,18 +1200,16 @@ class FastRouter:
         if any(trigger in norm_text for trigger in semantic_triggers):
             return None
 
-        # 5. Direct Web Search Intents (e.g. "search Marvel", "search for Python 3.12")
+        # 5. Direct Web Search & Headless RAG Intents (Zero window popups, zero focus hijacking)
         for prefix in [
-            "search the web for ", "search web for ", "search for ", "look up ", "search "
+            "search the web for ", "search web for ", "search internet for ", "search online for ",
+            "search for ", "look up ", "research online ", "research the web for ", "research "
         ]:
             if norm_text.startswith(prefix):
                 q = clean_text[len(prefix):].strip()
                 if q:
-                    from core.world_state import default_world_state
-                    active_app = default_world_state.get_focused_app()
-                    if active_app == "brave":
-                        return {"type": "tool", "tool": "BROWSER_SEARCH_FOREGROUND", "arguments": {"query": q}}
-                    return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": q, "mode": "BACKGROUND"}}
+                    # Pure headless RAG: executes in the background without stealing desktop focus or interrupting active media
+                    return {"type": "tool", "tool": "DEEP_RESEARCH", "arguments": {"query": q}}
 
         return None
 

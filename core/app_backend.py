@@ -207,13 +207,15 @@ class BrainAppCore:
                 "confidence": 1.0,
             }
 
-        # 6. Check if query requires real-time factual web grounding
+        # 6. Check if query requires real-time factual web grounding / Headless Internet RAG
         freshness_triggers = (
             "who is president", "who is the president", "who is prime minister",
             "who is the prime minister", "current price", "latest news", "who won",
-            "weather in", "current weather"
+            "weather in", "current weather", "search internet", "search online",
+            "search web", "search the web", "search the internet", "research online",
+            "research the web"
         )
-        if any(f in p_lower for f in freshness_triggers):
+        if any(f in p_lower for f in freshness_triggers) or p_lower.endswith("search web") or p_lower.endswith("search online") or p_lower.endswith("search internet"):
             web_res = self.cognitive_engine.execute_web_research(resolved_prompt)
             if web_res and web_res.get("text"):
                 dur_ms = (time.perf_counter() - start_time) * 1000.0

@@ -91,8 +91,9 @@ def format_tool_response(tool_name: str, result: Dict[str, Any], args: Optional[
         return str(data or "Webpage read successfully.")
 
     if tool_upper == "DEEP_RESEARCH":
-        summary = result.get("retrieved_summary") or result.get("data")
-        sources = result.get("sources", [])
+        data = result.get("data") if isinstance(result.get("data"), dict) else result
+        summary = data.get("retrieved_summary") or data.get("summary") or str(data)
+        sources = data.get("sources", []) if isinstance(data, dict) else result.get("sources", [])
         src_text = f"\n\nSources:\n" + "\n".join(f"- {s}" for s in sources[:3]) if sources else ""
         return f"Research Findings:\n{summary}{src_text}"
 

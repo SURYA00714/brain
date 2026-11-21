@@ -80,6 +80,21 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(status, "VERIFIED")
 
+    def test_headless_rag_search_routing(self):
+        """Ensures search queries use headless DEEP_RESEARCH without hijacking active windows or media."""
+        # Query 1: search for python 3.13
+        r1 = self.router.route("search for python 3.13")
+        self.assertIsNotNone(r1)
+        self.assertEqual(r1.get("type"), "tool")
+        self.assertEqual(r1.get("tool"), "DEEP_RESEARCH")
+        self.assertEqual(r1.get("arguments", {}).get("query"), "python 3.13")
+
+        # Query 2: search like a rag model inquiry
+        r2 = self.router.route("does it has internet access, can i search like a rag model with internet as database")
+        self.assertIsNotNone(r2)
+        self.assertEqual(r2.get("type"), "final")
+        self.assertIn("headless internet access", r2.get("answer", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
