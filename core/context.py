@@ -56,12 +56,13 @@ class GoalFrame:
 
 class ShortTermMemory:
     """
-    Maintains a bounded sliding window of recent conversation turns.
-    Provides pronoun, referential, and elliptical goal slot resolution.
+    Maintains a bounded sliding window of recent conversation turns and an unbounded session history.
+    Provides pronoun, referential, elliptical goal slot resolution, and ordinal turn recall.
     """
     def __init__(self, max_turns: int = 6):
         self.max_turns = max_turns
         self.turns: List[ConversationTurn] = []
+        self.session_history: List[ConversationTurn] = []
         self.active_goal_frame: Optional[GoalFrame] = None
 
     def add_turn(
@@ -81,6 +82,7 @@ class ShortTermMemory:
             tool_used=tool_used,
             screen_summary=screen_summary
         )
+        self.session_history.append(turn)
         self.turns.append(turn)
         if len(self.turns) > self.max_turns:
             self.turns.pop(0)
@@ -97,9 +99,28 @@ class ShortTermMemory:
 
         return turn
 
+    def get_turn_by_ordinal(self, ordinal: int) -> Optional[ConversationTurn]:
+        """Returns turn by 1-based index (e.g. 1 for first input, 2 for second input)."""
+        idx = ordinal - 1
+        if 0 <= idx < len(self.session_history):
+            return self.session_history[idx]
+        return None
+
+    def get_first_turn(self) -> Optional[ConversationTurn]:
+        """Returns the very first turn of this session."""
+        return self.session_history[0] if self.session_history else None
+
+    def get_last_turn(self, offset: int = 0) -> Optional[ConversationTurn]:
+        """Returns turn relative to the end (0 = latest, 1 = previous to latest)."""
+        idx = -(1 + offset)
+        if abs(idx) <= len(self.session_history):
+            return self.session_history[idx]
+        return None
+
     def clear(self):
         """Clears short-term conversational context."""
         self.turns.clear()
+        self.session_history.clear()
         self.active_goal_frame = None
 
     def get_last_substantive_request(self) -> Optional[str]:
@@ -297,8 +318,12 @@ class ContextBuilder:
         identity_snip = self.identity_mgr.get_identity_prompt_snippet()
         sections.append(identity_snip)
 
-        # 2. Verified World State (omit UNKNOWN state during pure conversational/creative prompts)
-        is_conversational = any(kw in user_request.lower() for kw in ("joke", "meaning of life", "poem", "story", "riddle", "philosophy", "how are you", "who are you", "hello", "hi", "hey"))
+        # 2. Verified World State (omit UNKNOWN state during pure conversational, creative, or educational prompts)
+        is_conversational = any(kw in user_request.lower() for kw in (
+            "joke", "meaning of life", "poem", "story", "riddle", "philosophy",
+            "how are you", "who are you", "hello", "hi", "hey",
+            "how can i train", "how to train", "teach me", "explain ", "how does ", "what is a "
+        ))
         world_snip = self.world_state_mgr.get_state_prompt_snippet()
         if not is_conversational or "Active Application: none" not in world_snip:
             sections.append(world_snip)

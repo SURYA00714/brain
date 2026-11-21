@@ -316,7 +316,47 @@ class FastRouter:
                 return {"type": "final", "answer": f"The {display_name} application was just opened."}
             return {"type": "final", "answer": "No applications have been opened recently."}
 
-        # 1c-3. Recent Dialogue & Conversation Context Recall
+        # 1c-3. Dialogue History & Ordinal Turn Recall
+        ordinal_words = {
+            "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+            "fourth": 4, "4th": 4, "fifth": 5, "5th": 5, "sixth": 6, "6th": 6,
+            "seventh": 7, "7th": 7, "eighth": 8, "8th": 8, "ninth": 9, "9th": 9, "tenth": 10, "10th": 10
+        }
+        m_ordinal = re.match(
+            r"^(?:what\s+(?:was|is)\s+(?:my\s+)?(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|sixth|6th|seventh|7th|eighth|8th|ninth|9th|tenth|10th)\s+(?:input|message|conversation|question|query|prompt)|what\s+did\s+i\s+ask\s+(first|1st))\??$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if m_ordinal:
+            ord_word = (m_ordinal.group(1) or m_ordinal.group(2) or "first").lower()
+            ord_num = ordinal_words.get(ord_word, 1)
+            from core.context import default_short_term_memory
+            turn = default_short_term_memory.get_turn_by_ordinal(ord_num)
+            if turn:
+                return {
+                    "type": "final",
+                    "answer": f"Your {ord_word} input in this session was: \"{turn.user_text}\"."
+                }
+            tot = len(default_short_term_memory.session_history)
+            return {
+                "type": "final",
+                "answer": f"We only have {tot} recorded input{'s' if tot != 1 else ''} so far in this session."
+            }
+
+        prev_input_queries = {
+            "what did i type previously", "what i typed previously", "what was my previous input",
+            "what was my previous message", "what was my last input", "what did i say before"
+        }
+        if norm_text in prev_input_queries:
+            from core.context import default_short_term_memory
+            turn = default_short_term_memory.get_last_turn(offset=0)
+            if turn:
+                return {
+                    "type": "final",
+                    "answer": f"Your previous input was: \"{turn.user_text}\"."
+                }
+            return {"type": "final", "answer": "You haven't sent any prior messages in this session yet."}
+
         recent_talk_queries = {
             "what was the last thing we talked about", "what did we just talk about",
             "what was our last conversation", "what was the last topic",

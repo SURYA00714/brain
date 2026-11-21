@@ -109,6 +109,48 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         self.assertEqual(r4.get("tool"), "DEEP_RESEARCH")
         self.assertEqual(r4.get("arguments", {}).get("query"), "gta 6")
 
+    def test_ordinal_dialogue_recall(self):
+        """Verifies deterministic recall for 1st, 2nd, 3rd, and previous inputs across long sessions."""
+        from core.context import default_short_term_memory
+        default_short_term_memory.clear()
+
+        # Add 7 turns (exceeding old 6-turn limit)
+        turns = [
+            "brain search gta 6 bugs and list bugs",
+            "what is brain search",
+            "who is the president of us",
+            "how can i train a neural network in a small pc",
+            "teach me how to train one",
+            "ok how to train one",
+            "another query"
+        ]
+        for t in turns:
+            default_short_term_memory.add_turn(user_text=t, agent_response="ok")
+
+        # Test first conversation
+        r1 = self.router.route("what was my first conversation")
+        self.assertIsNotNone(r1)
+        self.assertEqual(r1.get("type"), "final")
+        self.assertIn("brain search gta 6 bugs and list bugs", r1.get("answer", ""))
+
+        # Test 1st input
+        r2 = self.router.route("what was 1st input")
+        self.assertIsNotNone(r2)
+        self.assertEqual(r2.get("type"), "final")
+        self.assertIn("brain search gta 6 bugs and list bugs", r2.get("answer", ""))
+
+        # Test 3rd input
+        r3 = self.router.route("what was my 3rd input")
+        self.assertIsNotNone(r3)
+        self.assertEqual(r3.get("type"), "final")
+        self.assertIn("who is the president of us", r3.get("answer", ""))
+
+        # Test previous input
+        r4 = self.router.route("what was my previous input")
+        self.assertIsNotNone(r4)
+        self.assertEqual(r4.get("type"), "final")
+        self.assertIn("another query", r4.get("answer", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

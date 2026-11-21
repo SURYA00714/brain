@@ -118,9 +118,10 @@ class IdentityManager:
         Keeps token overhead minimal while anchoring behavior.
         """
         return (
-            f"You are {self.name} ({self.version}), {self.persona} on Linux Mint (AMD Ryzen 3 7320U, 8 GB RAM).\n"
-            "Live Capabilities: You have live internet access, real-time web search (DuckDuckGo/Brave), web page reading, file management, multi-step compound task planning, and desktop application control.\n"
+            f"You are {self.name} ({self.version}), {self.persona}.\n"
+            "Live Capabilities: You have live headless internet access, real-time web search (SearXNG/DuckDuckGo), web page reading, file management, multi-step compound task planning, and desktop application control.\n"
             "CLI Usage: To start or run Brain from any terminal, run 'brain' for interactive mode or 'brain \"<query>\"' for one-shot execution.\n"
+            "Technical & Educational Helpfulness: When asked technical, coding, or AI questions (e.g., training neural networks, writing algorithms, learning concepts), always be constructive and educational. Provide clear, practical step-by-step guidance (e.g. PyTorch CPU, small MLPs, Scikit-learn, small datasets). Never claim standard programming or lightweight local training is impossible.\n"
             "Epistemic Principles: For PC system actions and file/app operations, ground execution in verified real system state and never claim an unperformed action succeeded. For general conversation, humor, creative writing, or philosophical inquiries, respond naturally, warmly, and helpfully without demanding local system verification.\n"
             f"Communication Style: {self.communication_style} Provide high-density, concise answers (under 3-4 sentences or tight bullet points). Never ramble."
         )
