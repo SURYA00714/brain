@@ -779,6 +779,68 @@ class FastRouter:
                 plan.add_step(ExecutionStep(step_id=4, depends_on=[3], action_type="final", answer=f"Opened {target_app} and wrote: '{text_to_type}'."))
                 return {"type": "plan", "plan": plan}
 
+        # 3a-2b. Open Calculator and calculate/compute <expression>
+        m_calc = re.match(
+            r"^(?:open|launch|start)\s+(?:the\s+)?(calculator|calc)[,\s]+(?:and\s+)?(?:calculate|compute|solve|type|enter|do)\s+(.+)$",
+            norm_text,
+            flags=re.IGNORECASE
+        )
+        if not m_calc:
+            m_calc = re.match(
+                r"^(?:calculate|compute|solve)\s+(.+?)\s+(?:in|on|using|with)\s+(?:the\s+)?(calculator|calc)$",
+                norm_text,
+                flags=re.IGNORECASE
+            )
+            raw_expr = m_calc.group(1).strip() if m_calc else None
+        else:
+            raw_expr = m_calc.group(2).strip()
+
+        if raw_expr:
+            expr_clean = raw_expr.strip("\"'.,; ")
+            from core.math_logic import try_deterministic_math_or_logic
+            eval_res = try_deterministic_math_or_logic(f"calculate {expr_clean}")
+            calc_answer = eval_res.get("answer") if (eval_res and eval_res.get("solved")) else None
+
+            calc_text = f"{expr_clean}=\n"
+            plan = ExecutionPlan(goal=clean_text)
+            plan.add_step(ExecutionStep(
+                step_id=1,
+                action_type="tool",
+                tool_name="OPEN_APP",
+                arguments={"app_name": "calculator"},
+                expected_outcome="Calculator open",
+                verification_method="app_running",
+                description="Open Calculator"
+            ))
+            plan.add_step(ExecutionStep(
+                step_id=2,
+                depends_on=[1],
+                action_type="tool",
+                tool_name="FOCUS_APP",
+                arguments={"app_name": "calculator"},
+                expected_outcome="Calculator focused",
+                verification_method="focus",
+                description="Focus Calculator"
+            ))
+            plan.add_step(ExecutionStep(
+                step_id=3,
+                depends_on=[2],
+                action_type="tool",
+                tool_name="TYPE_TEXT",
+                arguments={"text": calc_text},
+                expected_outcome=f"Calculated {expr_clean}",
+                verification_method="none",
+                description=f"Calculate {expr_clean}"
+            ))
+            final_ans = f"Opened Calculator and calculated {expr_clean} = {calc_answer}." if calc_answer else f"Opened Calculator and calculated {expr_clean}."
+            plan.add_step(ExecutionStep(
+                step_id=4,
+                depends_on=[3],
+                action_type="final",
+                answer=final_ans
+            ))
+            return {"type": "plan", "plan": plan}
+
         # 3a-3. Open Brave and go to / navigate to / open <target>
         open_nav_match = re.match(r"^(?:open|launch|start)\s+(?:brave|browser)\s+(?:and|,)?\s*(?:go to|navigate to|open|visit)\s+(.+)$", norm_text, flags=re.IGNORECASE)
         if open_nav_match:

@@ -151,6 +151,44 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         self.assertEqual(r4.get("type"), "final")
         self.assertIn("another query", r4.get("answer", ""))
 
+    def test_compound_calculator_workflow(self):
+        """Verifies compound calculator execution plan and tool starvation prevention."""
+        from core.cognition import default_cognition
+        from core.app_backend import default_app_core
+
+        # 1. Router plan generation
+        r = self.router.route("open calculator and calculate 2+2")
+        self.assertIsNotNone(r)
+        self.assertEqual(r.get("type"), "plan")
+        plan = r["plan"]
+        self.assertEqual(len(plan.steps), 4)
+        self.assertEqual(plan.steps[0].tool_name, "OPEN_APP")
+        self.assertEqual(plan.steps[0].arguments.get("app_name"), "calculator")
+        self.assertEqual(plan.steps[1].tool_name, "FOCUS_APP")
+        self.assertEqual(plan.steps[2].tool_name, "TYPE_TEXT")
+        self.assertIn("2+2", plan.steps[2].arguments.get("text", ""))
+        self.assertIn("4", plan.steps[3].answer)
+
+        # 2. Cognition autonomous goal planner
+        cog_plan = default_cognition.plan_autonomous_goal("open calculator and calculate 2+2")
+        self.assertIsNotNone(cog_plan)
+        self.assertEqual(len(cog_plan.steps), 4)
+
+        # 3. Tool starvation prevention in planning prompt snippet
+        snip = default_cognition._get_tools_prompt_snippet("open calculator and calculate 2+2")
+        self.assertIn("TYPE_TEXT", snip)
+        self.assertIn("CLICK_UI_ELEMENT", snip)
+        self.assertIn("WAIT_FOR_UI_ELEMENT", snip)
+
+        # 4. End-to-end task execution in mock GUI
+        os.environ["BRAIN_MOCK_GUI"] = "1"
+        try:
+            res = default_app_core.execute_task("open calculator and calculate 2+2")
+            self.assertEqual(res["strategy"], "TOOL_ASSISTED_EXECUTION")
+            self.assertIn("4", res["text"])
+        finally:
+            os.environ.pop("BRAIN_MOCK_GUI", None)
+
 
 if __name__ == "__main__":
     unittest.main()

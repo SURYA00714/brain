@@ -674,6 +674,12 @@ class CognitiveEngine:
         if not user_request or not isinstance(user_request, str):
             return None
 
+        # 0. Check if the fast router already has a complete plan for this request
+        from tools.router import default_router
+        routed_full = default_router.route(user_request)
+        if routed_full and routed_full.get("type") == "plan":
+            return routed_full.get("plan")
+
         lowered = user_request.lower()
 
         # Goal pattern: Open browser + search (+ optional click first result)
@@ -855,7 +861,20 @@ class CognitiveEngine:
 
             for clause in clauses:
                 sub_match = default_router.route(clause)
-                if sub_match:
+                calc_m = re.match(r"^(?:calculate|compute|solve|type|enter)\s+(.+)$", clause, flags=re.IGNORECASE)
+                if not sub_match and calc_m:
+                    expr = calc_m.group(1).strip()
+                    composite_plan.add_step(ExecutionStep(
+                        step_id=curr_step_id,
+                        depends_on=list(prev_dep),
+                        action_type="tool",
+                        tool_name="TYPE_TEXT",
+                        arguments={"text": f"{expr}=\n"},
+                        description=f"Calculate {expr}"
+                    ))
+                    prev_dep = [curr_step_id]
+                    curr_step_id += 1
+                elif sub_match:
                     if sub_match.get("type") == "tool":
                         t_name = sub_match.get("tool")
                         t_args = sub_match.get("arguments", {})
@@ -912,13 +931,22 @@ class CognitiveEngine:
         except Exception:
             selected_tools = []
 
+        tools_dict = {t["name"]: t for t in default_registry.list_tools()}
+
+        # Prevent tool starvation: ensure core interaction tools are always included when relevant
+        req_lower = user_request.lower() if user_request else ""
+        if any(k in req_lower for k in ("open", "type", "click", "calc", "calculate", "write", "enter", "press", "window", "app", "ui")):
+            core_desktop_tools = ["OPEN_APP", "FOCUS_APP", "TYPE_TEXT", "PRESS_KEY", "CLICK_UI_ELEMENT", "WAIT_FOR_UI_ELEMENT"]
+            for t_name in core_desktop_tools:
+                if t_name in tools_dict and not any(st.get("name") == t_name for st in selected_tools):
+                    selected_tools.append(tools_dict[t_name])
+
         if not selected_tools:
             core_tools = [
                 "OPEN_APP", "CLOSE_APP", "FOCUS_APP", "TYPE_TEXT", "PRESS_KEY", "CLICK_MOUSE",
                 "BROWSER_SEARCH", "BROWSER_NAVIGATE", "DOM_TYPE", "DOM_CLICK", "READ_TEXT_FILE",
                 "CREATE_FILE", "WEB_SEARCH", "SCREENSHOT"
             ]
-            tools_dict = {t["name"]: t for t in default_registry.list_tools()}
             selected_tools = [tools_dict[name] for name in core_tools if name in tools_dict]
 
         lines = []
