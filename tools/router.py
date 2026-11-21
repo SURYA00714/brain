@@ -1191,6 +1191,20 @@ class FastRouter:
             }:
                 return {"type": "tool", "tool": "FIND_FILES", "arguments": {"pattern": "*.py", "search_root": "Brain"}}
 
+        # 5. Direct Web Search & Headless RAG Intents (Zero window popups, zero focus hijacking)
+        search_prefixes = [
+            "brain search ", "search the web for ", "search web for ", "search internet for ",
+            "search online for ", "search for ", "search ", "look up ", "research online ",
+            "research the web for ", "research ", "find out about ", "google "
+        ]
+        for prefix in search_prefixes:
+            if norm_text.startswith(prefix):
+                q = clean_text[len(prefix):].strip()
+                # Clean off conversational directives like "and tell its ...", "and tell me ...", "and summarize"
+                q = re.sub(r"\s+and\s+(?:tell\s+(?:me|its|about)|summarize|show|give\s+me).*$", "", q, flags=re.IGNORECASE).strip()
+                if q:
+                    return {"type": "tool", "tool": "DEEP_RESEARCH", "arguments": {"query": q}}
+
         # Semantic Exclusion Guard: Requests containing open-ended reasoning/summary triggers MUST reach the cloud model
         semantic_triggers = [
             "summarize", "whether", "recommend", "useful", "best",
@@ -1199,17 +1213,6 @@ class FastRouter:
         ]
         if any(trigger in norm_text for trigger in semantic_triggers):
             return None
-
-        # 5. Direct Web Search & Headless RAG Intents (Zero window popups, zero focus hijacking)
-        for prefix in [
-            "search the web for ", "search web for ", "search internet for ", "search online for ",
-            "search for ", "look up ", "research online ", "research the web for ", "research "
-        ]:
-            if norm_text.startswith(prefix):
-                q = clean_text[len(prefix):].strip()
-                if q:
-                    # Pure headless RAG: executes in the background without stealing desktop focus or interrupting active media
-                    return {"type": "tool", "tool": "DEEP_RESEARCH", "arguments": {"query": q}}
 
         return None
 

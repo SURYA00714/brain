@@ -353,8 +353,18 @@ class UniversalReasoningOrchestrator:
                 execution_mode=mode.value,
             )
 
-        # General Decomposition & Multi-Pass Assistance
-        reasoning_res = self.engine.solve(query=effective_prompt)
+        # General Decomposition & Multi-Pass Assistance with Grounded External Evidence
+        evidence = []
+        if self.accuracy.classify_external_info_need(effective_prompt) == "WEB":
+            try:
+                from tools.search import research_topic
+                r_data = research_topic(effective_prompt, max_results=3, deep=False)
+                if r_data.get("success") and r_data.get("findings"):
+                    evidence = r_data["findings"][:3]
+            except Exception:
+                pass
+
+        reasoning_res = self.engine.solve(query=effective_prompt, evidence=evidence if evidence else None)
         dur_ms = (time.perf_counter() - start) * 1000.0
 
         return UniversalReasoningResult(

@@ -173,7 +173,7 @@ class BrainAppCore:
         imperative_keywords = (
             "open ", "launch ", "click ", "type ", "start ", "close ", "kill ", "focus ",
             "switch to ", "find files", "list files", "mute ", "unmute ", "turn off ", "turn on ",
-            "play ", "watch ", "listen to "
+            "play ", "watch ", "listen to ", "search ", "brain search ", "research "
         )
         is_tool_action = (not is_inquiry) and ((routed is not None) or any(p_lower.startswith(k) or f" {k}" in p_lower for k in imperative_keywords))
 
@@ -208,14 +208,19 @@ class BrainAppCore:
             }
 
         # 6. Check if query requires real-time factual web grounding / Headless Internet RAG
-        freshness_triggers = (
-            "who is president", "who is the president", "who is prime minister",
-            "who is the prime minister", "current price", "latest news", "who won",
-            "weather in", "current weather", "search internet", "search online",
-            "search web", "search the web", "search the internet", "research online",
-            "research the web"
+        is_news_or_freshness = (
+            any(f in p_lower for f in (
+                "who is president", "who is the president", "who is prime minister",
+                "who is the prime minister", "current price", "price of", "who won",
+                "weather in", "current weather", "weather today", "headlines"
+            ))
+            or ("latest" in p_lower and any(w in p_lower for w in ("news", "release", "update", "version", "headline", "headlines", "status", "trend", "trends")))
+            or ("news" in p_lower and any(w in p_lower for w in ("latest", "today", "tech", "ai", "world", "gaming", "recent", "what")))
+            or any(p_lower.startswith(s) for s in ("search ", "brain search ", "research ", "find out about "))
+            or any(s in p_lower for s in ("search internet", "search online", "search web", "search the web", "search the internet", "research online"))
+            or p_lower.endswith("search web") or p_lower.endswith("search online") or p_lower.endswith("search internet")
         )
-        if any(f in p_lower for f in freshness_triggers) or p_lower.endswith("search web") or p_lower.endswith("search online") or p_lower.endswith("search internet"):
+        if is_news_or_freshness:
             web_res = self.cognitive_engine.execute_web_research(resolved_prompt)
             if web_res and web_res.get("text"):
                 dur_ms = (time.perf_counter() - start_time) * 1000.0

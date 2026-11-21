@@ -95,6 +95,20 @@ class TestNaturalIntelligenceAndMemory(unittest.TestCase):
         self.assertEqual(r2.get("type"), "final")
         self.assertIn("headless internet access", r2.get("answer", ""))
 
+        # Query 3: search gta 6 and tell its bugs news
+        r3 = self.router.route("search gta 6 and tell its bugs news")
+        self.assertIsNotNone(r3)
+        self.assertEqual(r3.get("type"), "tool")
+        self.assertEqual(r3.get("tool"), "DEEP_RESEARCH")
+        self.assertEqual(r3.get("arguments", {}).get("query"), "gta 6")
+
+        # Query 4: brain search gta 6
+        r4 = self.router.route("brain search gta 6")
+        self.assertIsNotNone(r4)
+        self.assertEqual(r4.get("type"), "tool")
+        self.assertEqual(r4.get("tool"), "DEEP_RESEARCH")
+        self.assertEqual(r4.get("arguments", {}).get("query"), "gta 6")
+
 
 if __name__ == "__main__":
     unittest.main()
