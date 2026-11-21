@@ -35,6 +35,10 @@ from tools.input import (
     right_click, get_screen_size, get_active_window,
     default_chain_tracker
 )
+from tools.ui_tree import (
+    inspect_accessible_tree, find_accessible_element,
+    click_accessible_element, type_accessible_element
+)
 
 
 
@@ -688,6 +692,39 @@ default_registry.register(Tool(
     parameters={"element_id": "string", "text": "string"},
     risk_level="MEDIUM",
     func=type_in_element
+))
+
+# Linux AT-SPI Accessibility Tree Tools
+default_registry.register(Tool(
+    name="INSPECT_ACCESSIBLE_TREE",
+    description="Inspects active applications and visible GUI widgets with exact bounding boxes via Linux AT-SPI accessibility tree.",
+    parameters={"app_name": "string (optional)", "max_depth": "integer (optional)", "max_elements": "integer (optional)"},
+    risk_level="LOW",
+    func=inspect_accessible_tree
+))
+
+default_registry.register(Tool(
+    name="FIND_ACCESSIBLE_ELEMENT",
+    description="Locates an accessible UI element by name or role and returns its exact screen coordinates and clickable center.",
+    parameters={"query": "string", "role": "string (optional)", "app_name": "string (optional)"},
+    risk_level="LOW",
+    func=find_accessible_element
+))
+
+default_registry.register(Tool(
+    name="CLICK_ACCESSIBLE_ELEMENT",
+    description="Clicks an accessible UI element on the desktop screen using exact AT-SPI coordinates without vision OCR latency.",
+    parameters={"query": "string", "role": "string (optional)", "app_name": "string (optional)", "button": "string (optional)"},
+    risk_level="MEDIUM",
+    func=click_accessible_element
+))
+
+default_registry.register(Tool(
+    name="TYPE_ACCESSIBLE_ELEMENT",
+    description="Focuses an accessible UI element and types text into it using exact AT-SPI coordinates.",
+    parameters={"query": "string", "text": "string", "role": "string (optional)", "app_name": "string (optional)"},
+    risk_level="MEDIUM",
+    func=type_accessible_element
 ))
 
 # Phase 9 Adaptive Capability Tools
