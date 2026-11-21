@@ -163,11 +163,18 @@ class BrainAppCore:
             "can you find ", "could you find ", "please find ",
             "can you run ", "could you run ", "please run ",
             "can you launch ", "could you launch ", "please launch ",
-            "can you turn ", "could you turn ", "please turn "
+            "can you turn ", "could you turn ", "please turn ",
+            "can you play ", "could you play ", "please play ",
+            "can you watch ", "could you watch ", "please watch ",
+            "can you listen to ", "could you listen to ", "please listen to "
         ))
 
         routed = default_router.route(resolved_prompt) if not is_inquiry else None
-        imperative_keywords = ("open ", "launch ", "click ", "type ", "start ", "close ", "kill ", "focus ", "switch to ", "find files", "list files", "mute ", "unmute ", "turn off ", "turn on ")
+        imperative_keywords = (
+            "open ", "launch ", "click ", "type ", "start ", "close ", "kill ", "focus ",
+            "switch to ", "find files", "list files", "mute ", "unmute ", "turn off ", "turn on ",
+            "play ", "watch ", "listen to "
+        )
         is_tool_action = (not is_inquiry) and ((routed is not None) or any(p_lower.startswith(k) or f" {k}" in p_lower for k in imperative_keywords))
 
         if is_tool_action:

@@ -478,6 +478,11 @@ class FastRouter:
             m_open_in = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:open|play|watch|find)\s+(.+?)\s+(?:in|on)\s+([a-zA-Z0-9_\-\.]+)$", norm_text, flags=re.IGNORECASE)
             if m_open_in:
                 s_cand = re.sub(r"\.(com|org|net|io|co|to)$", "", m_open_in.group(2).lower().strip())
+                if s_cand in ("youtubr", "yt", "yutube", "you tube"):
+                    s_cand = "youtube"
+                elif s_cand in ("browser", "browsr", "web"):
+                    s_cand = "youtube"
+
                 if s_cand in site_search_urls and s_cand != "brave":
                     matched_site = s_cand
                     matched_query = m_open_in.group(1).strip()
@@ -487,10 +492,19 @@ class FastRouter:
                     site_term = m_open_in.group(2).strip()
                     return {"type": "tool", "tool": "BROWSER_SEARCH", "arguments": {"query": f"{q_term} {site_term}", "mode": "FOREGROUND"}}
 
+        if not matched_site:
+            m_play_direct = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:play|watch|listen to)\s+(.+)$", norm_text, flags=re.IGNORECASE)
+            if m_play_direct:
+                q_cand = m_play_direct.group(1).strip()
+                if q_cand and not q_cand.endswith((".mp3", ".mp4", ".mkv", ".avi", ".wav")):
+                    matched_site = "youtube"
+                    matched_query = q_cand
+
         if matched_site and matched_query:
             import urllib.parse
-            # Check for click / open first result
-            has_first = bool(re.search(r"(,\s*)?(and\s+)?(then\s+)?(open|click|play)\s+(the\s+)?(first\s+)?(result|video|link|item)", matched_query, flags=re.IGNORECASE))
+            # Check for click / open first result (default to True for media play requests)
+            is_play_intent = bool(re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:play|watch|listen to)\b", norm_text, flags=re.IGNORECASE))
+            has_first = is_play_intent or bool(re.search(r"(,\s*)?(and\s+)?(then\s+)?(open|click|play)\s+(the\s+)?(first\s+)?(result|video|link|item)", matched_query, flags=re.IGNORECASE))
             if has_first:
                 clean_q = re.sub(r"(,\s*)?(and\s+)?(then\s+)?(open|click|play)\s+(the\s+)?(first\s+)?(result|video|link|item).*$", "", matched_query, flags=re.IGNORECASE).strip().strip(".,")
             else:

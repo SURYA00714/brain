@@ -28,14 +28,41 @@ class ConversationTurn:
         self.timestamp = timestamp or time.time()
 
 
+class GoalFrame:
+    """
+    Formal Goal State Frame holding structured task slots across conversation turns:
+    - intent: e.g. 'PLAY_MEDIA', 'SEARCH_WEB', 'OPEN_APP'
+    - target: e.g. 'mr.beast videos', 'python documentation'
+    - platform: e.g. 'youtube', 'brave', 'reddit'
+    - completed: bool
+    """
+    def __init__(self, intent: str = "", target: str = "", platform: str = "", completed: bool = False):
+        self.intent = intent
+        self.target = target
+        self.platform = platform
+        self.completed = completed
+
+    def is_active(self) -> bool:
+        return bool(self.intent and self.target and not self.completed)
+
+    def to_executable_query(self) -> str:
+        plat = self.platform or ("youtube" if self.intent == "PLAY_MEDIA" else "brave")
+        if self.intent == "PLAY_MEDIA":
+            return f"play {self.target} in {plat}"
+        elif self.intent == "SEARCH_WEB":
+            return f"open {plat} and search {self.target}"
+        return f"{self.target} in {plat}"
+
+
 class ShortTermMemory:
     """
     Maintains a bounded sliding window of recent conversation turns.
-    Provides pronoun and referential context resolution ("it", "that", "the previous one").
+    Provides pronoun, referential, and elliptical goal slot resolution.
     """
     def __init__(self, max_turns: int = 6):
         self.max_turns = max_turns
         self.turns: List[ConversationTurn] = []
+        self.active_goal_frame: Optional[GoalFrame] = None
 
     def add_turn(
         self,
@@ -57,11 +84,54 @@ class ShortTermMemory:
         self.turns.append(turn)
         if len(self.turns) > self.max_turns:
             self.turns.pop(0)
+
+        # Track or update GoalFrame from user_text
+        lowered = user_text.lower().strip(".?!")
+        m_play = re.match(r"^(?:can you\s+|could you\s+|please\s+)?(?:play|watch|listen to)\s+(.+?)(?:\s+(?:in|on)\s+([a-zA-Z0-9_\-\.]+))?$", lowered)
+        if m_play:
+            q_target = m_play.group(1).strip()
+            q_plat = self.normalize_platform_name(m_play.group(2).strip()) if m_play.group(2) else "youtube"
+            self.active_goal_frame = GoalFrame(intent="PLAY_MEDIA", target=q_target, platform=q_plat)
+        elif self.active_goal_frame and ("opened" in agent_response.lower() or "playing" in agent_response.lower() or "searched" in agent_response.lower()):
+            self.active_goal_frame.completed = True
+
         return turn
 
     def clear(self):
         """Clears short-term conversational context."""
         self.turns.clear()
+        self.active_goal_frame = None
+
+    def get_last_substantive_request(self) -> Optional[str]:
+        """Finds the most recent non-elliptical user request string."""
+        for turn in reversed(self.turns):
+            txt = turn.user_text.strip().lower()
+            if not re.match(r"^(?:in|on|using|through|with)\s+", txt):
+                return turn.user_text
+        return None
+
+    def get_last_user_request(self) -> Optional[str]:
+        """Finds the most recent user request string."""
+        if self.turns:
+            return self.turns[-1].user_text
+        return None
+
+    @staticmethod
+    def normalize_platform_name(name: str) -> str:
+        clean = name.strip().lower()
+        if clean in ("youtubr", "yt", "yutube", "you tube", "yotube", "youtube"):
+            return "youtube"
+        elif clean in ("browser", "browsr", "brave", "brave browser", "web"):
+            return "brave"
+        elif clean in ("wikipidia", "wiki", "wikipedia"):
+            return "wikipedia"
+        elif clean in ("git hub", "gh", "github"):
+            return "github"
+        elif clean in ("reddit", "reddt"):
+            return "reddit"
+        elif clean in ("terminal", "term", "bash", "console"):
+            return "terminal"
+        return clean
 
     def get_last_app(self) -> Optional[str]:
         """Finds the most recently referenced application in conversation or active state."""
@@ -154,6 +224,21 @@ class ShortTermMemory:
             from core.companion_state import default_interruption_controller
             default_interruption_controller.request_interruption("user_stop_command")
             return "stop current action"
+
+        # 7. Elliptical prepositional / platform refinement: "in youtube", "in youtubr", "in browser", "on reddit"
+        m_prep = re.match(r"^(?:please\s+)?(?:in|on|using|through|with)\s+([a-zA-Z0-9_\-\.\s]+)$", lowered)
+        if m_prep:
+            raw_plat = m_prep.group(1).strip()
+            norm_plat = self.normalize_platform_name(raw_plat)
+            if self.active_goal_frame and self.active_goal_frame.target:
+                self.active_goal_frame.platform = norm_plat
+                self.active_goal_frame.completed = False
+                return self.active_goal_frame.to_executable_query()
+
+            last_sub = self.get_last_substantive_request()
+            if last_sub:
+                clean_prev = re.sub(r"\s+(?:in|on)\s+[a-zA-Z0-9_\-\.\s]+$", "", last_sub, flags=re.IGNORECASE).strip()
+                return f"{clean_prev} in {norm_plat}"
 
         return user_text
 
